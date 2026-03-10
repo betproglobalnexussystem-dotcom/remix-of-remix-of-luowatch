@@ -36,7 +36,7 @@ const ArtPlayerComponent = ({ src, poster, title }: ArtPlayerComponentProps) => 
       container: artRef.current,
       url: streamUrl,
       poster: poster || "",
-      title: title || "",
+      // title displayed via controls
       volume: 0.7,
       autoplay: false,
       pip: true,
