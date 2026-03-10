@@ -73,7 +73,7 @@ const MusicPlayerPage = () => {
           <main className="flex-1 min-w-0">
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-3">
               {video.videoUrl ? (
-                <ArtPlayerComponent src={video.videoUrl} poster={video.thumbnailUrl} title={video.title} />
+                <LuoWatchPlayer src={video.videoUrl} poster={video.thumbnailUrl} title={video.title} />
               ) : video.thumbnailUrl ? (
                 <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
               ) : (
