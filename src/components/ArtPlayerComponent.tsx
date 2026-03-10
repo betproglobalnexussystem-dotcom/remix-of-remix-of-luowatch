@@ -48,7 +48,7 @@ const ArtPlayerComponent = ({ src, poster, title }: ArtPlayerComponentProps) => 
         url: streamUrl,
         poster: poster || "",
         volume: 0.7,
-        autoplay: false,
+        autoplay: true,
         pip: true,
         autoSize: false,
         autoMini: true,
@@ -67,7 +67,9 @@ const ArtPlayerComponent = ({ src, poster, title }: ArtPlayerComponentProps) => 
         autoPlayback: true,
         airplay: true,
         theme: "#e11d48",
-      });
+        preload: "auto",
+        fastForward: true,
+      } as any);
     });
 
     return () => {
