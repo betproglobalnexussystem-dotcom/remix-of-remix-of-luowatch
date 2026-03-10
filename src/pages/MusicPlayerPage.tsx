@@ -7,7 +7,7 @@ import { incrementMusicPlays, logActivity, getMusicById } from "@/lib/firestore"
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import CommentSection from "@/components/CommentSection";
-import ModernPlayer from "@/components/ModernPlayer";
+import ArtPlayerComponent from "@/components/ArtPlayerComponent";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -73,7 +73,7 @@ const MusicPlayerPage = () => {
           <main className="flex-1 min-w-0">
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-3">
               {video.videoUrl ? (
-                <ModernPlayer src={video.videoUrl} poster={video.thumbnailUrl} title={video.title} />
+                <ArtPlayerComponent src={video.videoUrl} poster={video.thumbnailUrl} title={video.title} />
               ) : video.thumbnailUrl ? (
                 <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
               ) : (

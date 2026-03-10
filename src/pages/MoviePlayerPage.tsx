@@ -7,7 +7,7 @@ import { incrementMovieViews, incrementMovieDownloads, logActivity, getMovieById
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import CommentSection from "@/components/CommentSection";
-import ModernPlayer from "@/components/ModernPlayer";
+
 import { toast } from "sonner";
 
 const MoviePlayerPage = () => {
@@ -107,7 +107,29 @@ const MoviePlayerPage = () => {
             {/* Video Player */}
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-3">
               {canWatch && videoUrl ? (
-                <ModernPlayer src={videoUrl} poster={movie.posterUrl} title={currentEpTitle} />
+                (() => {
+                  const fileId = getGDriveFileId(videoUrl);
+                  if (fileId) {
+                    return (
+                      <iframe
+                        src={`https://drive.google.com/file/d/${fileId}/preview`}
+                        className="w-full h-full"
+                        allow="autoplay; encrypted-media"
+                        allowFullScreen
+                        sandbox="allow-scripts allow-same-origin allow-popups"
+                      />
+                    );
+                  }
+                  return (
+                    <video
+                      src={videoUrl}
+                      poster={movie.posterUrl}
+                      controls
+                      className="w-full h-full object-contain"
+                      playsInline
+                    />
+                  );
+                })()
               ) : (
                 <div className="relative w-full h-full cursor-pointer" onClick={handlePlayerClick}>
                   {movie.posterUrl && <img src={movie.posterUrl} alt={movie.title} className="w-full h-full object-cover opacity-30" />}
