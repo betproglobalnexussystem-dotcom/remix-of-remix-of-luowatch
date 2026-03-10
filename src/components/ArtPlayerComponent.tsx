@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ArtPlayerComponentProps {
   src: string;
@@ -26,24 +26,29 @@ const getStreamUrl = (url: string): string => {
 const ArtPlayerComponent = ({ src, poster, title }: ArtPlayerComponentProps) => {
   const artRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   const streamUrl = getStreamUrl(src);
 
   useEffect(() => {
-    if (!artRef.current) return;
+    if (!artRef.current || !streamUrl) return;
 
-    // Dynamic import to avoid React duplication issues
+    setIsLoading(true);
+    setHasError(false);
+
+    let cancelled = false;
+
     import("artplayer").then((mod) => {
       const Artplayer = mod.default;
-      
-      if (!artRef.current) return;
-      
-      // Destroy previous instance if exists
+
+      if (cancelled || !artRef.current) return;
+
       if (playerRef.current) {
         playerRef.current.destroy(false);
         playerRef.current = null;
       }
 
-      playerRef.current = new Artplayer({
+      const player = new (Artplayer as any)({
         container: artRef.current,
         url: streamUrl,
         poster: poster || "",
@@ -67,12 +72,39 @@ const ArtPlayerComponent = ({ src, poster, title }: ArtPlayerComponentProps) => 
         autoPlayback: true,
         airplay: true,
         theme: "#e11d48",
-        preload: "auto",
         fastForward: true,
-      } as any);
+      });
+
+      player.on("ready", () => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+      player.on("video:canplay", () => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+      player.on("error", () => {
+        if (!cancelled) {
+          setIsLoading(false);
+          setHasError(true);
+        }
+      });
+
+      // Fallback: hide loading after 5s regardless
+      setTimeout(() => {
+        if (!cancelled) setIsLoading(false);
+      }, 5000);
+
+      playerRef.current = player;
+    }).catch(() => {
+      if (!cancelled) {
+        setIsLoading(false);
+        setHasError(true);
+      }
     });
 
     return () => {
+      cancelled = true;
       if (playerRef.current) {
         playerRef.current.destroy(false);
         playerRef.current = null;
@@ -80,7 +112,24 @@ const ArtPlayerComponent = ({ src, poster, title }: ArtPlayerComponentProps) => 
     };
   }, [streamUrl, poster]);
 
-  return <div ref={artRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={artRef} className="w-full h-full" />
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-muted-foreground text-[10px]">Loading video...</span>
+          </div>
+        </div>
+      )}
+      {hasError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+          <span className="text-muted-foreground text-xs">Failed to load video. Try refreshing.</span>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default ArtPlayerComponent;
