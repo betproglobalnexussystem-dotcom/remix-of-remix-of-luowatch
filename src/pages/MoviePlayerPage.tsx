@@ -120,8 +120,13 @@ const MoviePlayerPage = () => {
                           sandbox="allow-scripts allow-same-origin allow-popups"
                         />
                         {/* Block the Google Drive popout icon in top-right */}
-                        <div className="absolute top-0 right-0 w-14 h-14 z-10 flex items-center justify-center bg-black cursor-default" onClick={(e) => e.stopPropagation()}>
-                          <img src="/logo.png" alt="LUO WATCH" className="w-8 h-8" />
+                        <div 
+                          className="absolute top-0 right-0 w-20 h-20 z-50 flex items-center justify-center bg-black cursor-not-allowed select-none pointer-events-auto"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onContextMenu={(e) => { e.preventDefault(); }}
+                        >
+                          <img src="/logo.png" alt="LUO WATCH" className="w-10 h-10 pointer-events-none" draggable={false} />
                         </div>
                       </div>
                     );
