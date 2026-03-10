@@ -7,7 +7,7 @@ import { incrementMusicPlays, logActivity, getMusicById } from "@/lib/firestore"
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import CommentSection from "@/components/CommentSection";
-import ModernPlayer from "@/components/ModernPlayer";
+import ArtPlayerComponent from "@/components/ArtPlayerComponent";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
