@@ -7,7 +7,7 @@ import { incrementMovieViews, incrementMovieDownloads, logActivity, getMovieById
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import CommentSection from "@/components/CommentSection";
-import ModernPlayer from "@/components/ModernPlayer";
+
 import { toast } from "sonner";
 
 const MoviePlayerPage = () => {
