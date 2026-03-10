@@ -69,7 +69,7 @@ const ArtPlayerComponent = ({ src, poster, title }: ArtPlayerComponentProps) => 
         theme: "#e11d48",
         preload: "auto",
         fastForward: true,
-      });
+      } as any);
     });
 
     return () => {
