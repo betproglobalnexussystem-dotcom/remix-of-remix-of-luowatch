@@ -71,6 +71,7 @@ const AdminDashboard = () => {
         {activeTab === "subscriptions" && <SubscriptionsTab />}
         {activeTab === "wallet" && <WalletTab />}
         {activeTab === "carousel" && <CarouselTab />}
+        {activeTab === "earnings" && <CreatorEarningsTab />}
       </div>
     </div>
   );
