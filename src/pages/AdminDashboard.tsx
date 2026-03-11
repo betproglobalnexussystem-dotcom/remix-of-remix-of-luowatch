@@ -20,14 +20,15 @@ import { toast } from "sonner";
 import {
   Users, Film, Music, Video, Tv, BarChart3, Trash2, Edit, Eye,
   Plus, Search, Shield, Crown, DollarSign, RefreshCw, X, Check,
-  Download, UserPlus, Upload, Wallet, List, Loader2, ArrowDownToLine, Image
+  Download, UserPlus, Upload, Wallet, List, Loader2, ArrowDownToLine, Image, TrendingUp
 } from "lucide-react";
+import { getAllCreatorEarnings, getAllEarningTransactions, resetAllContentCounts, CreatorEarning, EarningTransaction } from "@/lib/earnings";
 import { cn } from "@/lib/utils";
 import { genreList } from "@/data/categories";
 
 const ADMIN_EMAIL = "mainplatform.nexus@gmail.com";
 
-type Tab = "overview" | "add-creator" | "users" | "upload" | "manage" | "subscriptions" | "wallet" | "carousel";
+type Tab = "overview" | "add-creator" | "users" | "upload" | "manage" | "subscriptions" | "wallet" | "carousel" | "earnings";
 
 const AdminDashboard = () => {
   const { user, isLoading } = useAuth();
@@ -45,6 +46,7 @@ const AdminDashboard = () => {
     { id: "subscriptions", label: "Subscriptions", icon: Crown },
     { id: "wallet", label: "Wallet", icon: Wallet },
     { id: "carousel", label: "Carousel", icon: Image },
+    { id: "earnings", label: "Creator Earnings", icon: TrendingUp },
   ];
 
   return (
@@ -69,6 +71,7 @@ const AdminDashboard = () => {
         {activeTab === "subscriptions" && <SubscriptionsTab />}
         {activeTab === "wallet" && <WalletTab />}
         {activeTab === "carousel" && <CarouselTab />}
+        {activeTab === "earnings" && <CreatorEarningsTab />}
       </div>
     </div>
   );
@@ -900,6 +903,194 @@ const CarouselTab = () => {
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+
+// ========== CREATOR EARNINGS ==========
+const CreatorEarningsTab = () => {
+  const [earnings, setEarnings] = useState<CreatorEarning[]>([]);
+  const [transactions, setTransactions] = useState<EarningTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+  const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [e, t] = await Promise.all([getAllCreatorEarnings(), getAllEarningTransactions()]);
+      setEarnings(e);
+      setTransactions(t);
+    } catch { }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleResetCounts = async () => {
+    if (!confirm("This will reset ALL movie/music view and download counters to 0. Are you sure?")) return;
+    setResetting(true);
+    try {
+      await resetAllContentCounts();
+      toast.success("All content counts have been reset to 0!");
+    } catch { toast.error("Reset failed"); }
+    setResetting(false);
+  };
+
+  const vjEarnings = earnings.filter(e => e.creatorRole === "vj");
+  const musicianEarnings = earnings.filter(e => e.creatorRole === "musician");
+  const totalVJBalance = vjEarnings.reduce((s, e) => s + (e.balance || 0), 0);
+  const totalVJEarned = vjEarnings.reduce((s, e) => s + (e.totalEarned || 0), 0);
+  const totalMusicianBalance = musicianEarnings.reduce((s, e) => s + (e.balance || 0), 0);
+  const totalMusicianEarned = musicianEarnings.reduce((s, e) => s + (e.totalEarned || 0), 0);
+
+  const creatorTransactions = selectedCreator ? transactions.filter(t => t.creatorId === selectedCreator) : transactions;
+  const formatUGX = (n: number) => `UGX ${n.toLocaleString()}`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-foreground text-sm font-bold">Creator Earnings</h2>
+        <div className="flex gap-2">
+          <button onClick={fetchData} className="text-[9px] text-primary font-semibold flex items-center gap-1"><RefreshCw className="w-2.5 h-2.5" /> Refresh</button>
+          <button onClick={handleResetCounts} disabled={resetting} className="text-[9px] bg-destructive text-destructive-foreground px-2.5 py-1 rounded font-bold disabled:opacity-50">
+            {resetting ? "Resetting..." : "Reset All Content Counts"}
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="bg-card border border-border rounded p-3">
+          <p className="text-[9px] text-muted-foreground">Total VJ Balance (owed)</p>
+          <p className="text-primary text-lg font-bold">{formatUGX(totalVJBalance)}</p>
+        </div>
+        <div className="bg-card border border-border rounded p-3">
+          <p className="text-[9px] text-muted-foreground">Total VJ Earned</p>
+          <p className="text-foreground text-lg font-bold">{formatUGX(totalVJEarned)}</p>
+        </div>
+        <div className="bg-card border border-border rounded p-3">
+          <p className="text-[9px] text-muted-foreground">Total Musician Balance</p>
+          <p className="text-primary text-lg font-bold">{formatUGX(totalMusicianBalance)}</p>
+        </div>
+        <div className="bg-card border border-border rounded p-3">
+          <p className="text-[9px] text-muted-foreground">Total Musician Earned</p>
+          <p className="text-foreground text-lg font-bold">{formatUGX(totalMusicianEarned)}</p>
+        </div>
+      </div>
+
+      {loading ? <p className="text-muted-foreground text-[10px]">Loading...</p> : (
+        <>
+          {/* VJ Earnings Table */}
+          <div className="bg-card border border-border rounded p-3">
+            <h3 className="text-foreground text-xs font-bold mb-2">VJ Earnings (UGX 250/download)</h3>
+            {vjEarnings.length === 0 ? <p className="text-muted-foreground text-[10px]">No VJ earnings yet</p> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px]">
+                  <thead><tr className="border-b border-border">
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">VJ Name</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Downloads</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Earned</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Withdrawn</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Balance</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Actions</th>
+                  </tr></thead>
+                  <tbody>
+                    {vjEarnings.map(e => (
+                      <tr key={e.id} className="border-b border-border last:border-0">
+                        <td className="p-1.5 text-foreground font-semibold">{e.creatorName}</td>
+                        <td className="p-1.5 text-muted-foreground">{e.totalDownloads}</td>
+                        <td className="p-1.5 text-foreground font-bold">{formatUGX(e.totalEarned)}</td>
+                        <td className="p-1.5 text-muted-foreground">{formatUGX(e.totalWithdrawn)}</td>
+                        <td className="p-1.5 text-primary font-bold">{formatUGX(e.balance)}</td>
+                        <td className="p-1.5">
+                          <button onClick={() => setSelectedCreator(selectedCreator === e.id ? null : e.id)} className="text-[9px] bg-secondary text-foreground px-1.5 py-0.5 rounded">
+                            {selectedCreator === e.id ? "Hide" : "Transactions"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Musician Earnings Table */}
+          <div className="bg-card border border-border rounded p-3">
+            <h3 className="text-foreground text-xs font-bold mb-2">Musician Earnings (UGX 50,000 at 10,000 downloads/month)</h3>
+            {musicianEarnings.length === 0 ? <p className="text-muted-foreground text-[10px]">No musician earnings yet</p> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px]">
+                  <thead><tr className="border-b border-border">
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Musician</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Total Downloads</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Monthly</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Earned</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Balance</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Actions</th>
+                  </tr></thead>
+                  <tbody>
+                    {musicianEarnings.map(e => (
+                      <tr key={e.id} className="border-b border-border last:border-0">
+                        <td className="p-1.5 text-foreground font-semibold">{e.creatorName}</td>
+                        <td className="p-1.5 text-muted-foreground">{e.totalDownloads}</td>
+                        <td className="p-1.5 text-muted-foreground">{e.monthlyDownloads} / 10,000</td>
+                        <td className="p-1.5 text-foreground font-bold">{formatUGX(e.totalEarned)}</td>
+                        <td className="p-1.5 text-primary font-bold">{formatUGX(e.balance)}</td>
+                        <td className="p-1.5">
+                          <button onClick={() => setSelectedCreator(selectedCreator === e.id ? null : e.id)} className="text-[9px] bg-secondary text-foreground px-1.5 py-0.5 rounded">
+                            {selectedCreator === e.id ? "Hide" : "Transactions"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Transactions */}
+          <div className="bg-card border border-border rounded p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-foreground text-xs font-bold">
+                {selectedCreator ? `Transactions for ${earnings.find(e => e.id === selectedCreator)?.creatorName}` : "All Transactions"}
+              </h3>
+              {selectedCreator && <button onClick={() => setSelectedCreator(null)} className="text-[9px] text-primary font-semibold">Show All</button>}
+            </div>
+            {creatorTransactions.length === 0 ? <p className="text-muted-foreground text-[10px]">No transactions</p> : (
+              <div className="overflow-x-auto max-h-64">
+                <table className="w-full text-[10px]">
+                  <thead><tr className="border-b border-border">
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Creator</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Type</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Amount</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Details</th>
+                    <th className="text-left p-1.5 text-muted-foreground font-semibold">Date</th>
+                  </tr></thead>
+                  <tbody>
+                    {creatorTransactions.slice(0, 50).map(tx => (
+                      <tr key={tx.id} className="border-b border-border last:border-0">
+                        <td className="p-1.5 text-foreground font-semibold">{tx.creatorName}</td>
+                        <td className="p-1.5"><span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded",
+                          tx.type === "download_credit" ? "bg-green-500/20 text-green-400" :
+                          tx.type === "withdrawal" ? "bg-yellow-500/20 text-yellow-400" :
+                          "bg-primary/20 text-primary"
+                        )}>{tx.type === "download_credit" ? "Download" : tx.type === "withdrawal" ? "Withdrawal" : "Milestone"}</span></td>
+                        <td className="p-1.5 text-foreground font-bold">{tx.type === "withdrawal" ? `-${formatUGX(tx.amount)}` : tx.amount > 0 ? `+${formatUGX(tx.amount)}` : "—"}</td>
+                        <td className="p-1.5 text-muted-foreground truncate max-w-[200px]">{tx.contentTitle || tx.phone || "—"}</td>
+                        <td className="p-1.5 text-muted-foreground">{tx.createdAt?.toDate ? tx.createdAt.toDate().toLocaleDateString() : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

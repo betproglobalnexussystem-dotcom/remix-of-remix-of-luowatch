@@ -6,9 +6,11 @@ import { useMovie, useEpisodes, useMovies } from "@/hooks/useFirestore";
 import { incrementMovieViews, incrementMovieDownloads, logActivity, getMovieById } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { creditVJDownload, isAdminActivatedSub } from "@/lib/earnings";
 import CommentSection from "@/components/CommentSection";
-
 import { toast } from "sonner";
+
+const INTERNAL_ROLES = ["vj", "admin", "musician", "tiktoker"];
 
 const MoviePlayerPage = () => {
   const { id } = useParams();
@@ -43,11 +45,7 @@ const MoviePlayerPage = () => {
 
   const getGDriveFileId = (url: string): string | null => {
     if (!url) return null;
-    const patterns = [
-      /\/file\/d\/([a-zA-Z0-9_-]+)/,
-      /id=([a-zA-Z0-9_-]+)/,
-      /\/d\/([a-zA-Z0-9_-]+)/,
-    ];
+    const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /id=([a-zA-Z0-9_-]+)/, /\/d\/([a-zA-Z0-9_-]+)/];
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match) return match[1];
@@ -55,30 +53,52 @@ const MoviePlayerPage = () => {
     return null;
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!user) { setAuthModalTab("login"); setShowAuthModal(true); return; }
     if (!hasContentAccess) { openSubModal("content"); return; }
     const url = movie.movieUrl || videoUrl;
-    if (url) {
-      const isCreatorOrAdmin = ["vj", "admin", "musician", "tiktoker"].includes(user.role?.toLowerCase() || "");
-      if (!isCreatorOrAdmin) {
-        incrementMovieDownloads(id!).catch(() => {});
+    if (!url) { toast.error("No download link available"); return; }
+
+    const userRole = user.role?.toLowerCase() || "";
+    const isCreatorOrAdmin = INTERNAL_ROLES.includes(userRole);
+
+    // Only count downloads for subscribed regular users (not creators/admin, not admin-activated subs)
+    if (!isCreatorOrAdmin) {
+      try {
+        // Check if subscription was admin-activated (free sub = don't count)
+        const isAdminSub = await isAdminActivatedSub(user.id);
+        if (!isAdminSub) {
+          // This is a real paying subscriber - count the download
+          incrementMovieDownloads(id!).catch(() => {});
+          
+          // Credit the VJ who owns this movie (250 UGX)
+          if (movie.vjId && movie.vjId !== "admin") {
+            creditVJDownload(
+              movie.vjId,
+              movie.vjName,
+              id!,
+              movie.title,
+              user.id,
+              `${user.firstName} ${user.lastName}`.trim() || user.email
+            ).catch(() => {});
+          }
+        }
+      } catch {
+        // Don't block download if earning credit fails
       }
-      logActivity({ type: "download", contentType: "movie", contentId: id!, contentTitle: movie.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
-      
-      const fileId = getGDriveFileId(url);
-      if (fileId) {
-        const episodeTitle = isSeries && filteredEpisodes[activeEpisode]
-          ? `${movie.title} - ${filteredEpisodes[activeEpisode].episodeTitle || `Episode ${filteredEpisodes[activeEpisode].episode}`}`
-          : movie.title;
-        const fileName = encodeURIComponent(`${episodeTitle}.mp4`);
-        const downloadUrl = `https://black-band-8860.arthurdimpoz.workers.dev/download?fileId=${fileId}&fileName=${fileName}`;
-        window.location.href = downloadUrl;
-      } else {
-        window.location.href = url;
-      }
+    }
+
+    logActivity({ type: "download", contentType: "movie", contentId: id!, contentTitle: movie.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
+
+    const fileId = getGDriveFileId(url);
+    if (fileId) {
+      const episodeTitle = isSeries && filteredEpisodes[activeEpisode]
+        ? `${movie.title} - ${filteredEpisodes[activeEpisode].episodeTitle || `Episode ${filteredEpisodes[activeEpisode].episode}`}`
+        : movie.title;
+      const fileName = encodeURIComponent(`${episodeTitle}.mp4`);
+      window.location.href = `https://black-band-8860.arthurdimpoz.workers.dev/download?fileId=${fileId}&fileName=${fileName}`;
     } else {
-      toast.error("No download link available");
+      window.location.href = url;
     }
   };
 
@@ -122,7 +142,6 @@ const MoviePlayerPage = () => {
                           allowFullScreen
                           sandbox="allow-scripts allow-same-origin allow-popups"
                         />
-                        {/* Block the Google Drive popout icon in top-right */}
                         <div 
                           className="absolute top-0 right-0 w-16 h-16 z-50 flex items-center justify-center cursor-not-allowed select-none"
                           style={{ background: 'transparent' }}
@@ -136,13 +155,7 @@ const MoviePlayerPage = () => {
                     );
                   }
                   return (
-                    <video
-                      src={videoUrl}
-                      poster={movie.posterUrl}
-                      controls
-                      className="w-full h-full object-contain"
-                      playsInline
-                    />
+                    <video src={videoUrl} poster={movie.posterUrl} controls className="w-full h-full object-contain" playsInline />
                   );
                 })()
               ) : (
@@ -152,18 +165,14 @@ const MoviePlayerPage = () => {
                     <div className="backdrop-blur-sm rounded-xl px-6 py-5 flex flex-col items-center gap-2.5 max-w-[220px] w-full">
                       {!user ? (
                         <>
-                          <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center">
-                            <LogIn className="w-5 h-5 text-primary" />
-                          </div>
+                          <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center"><LogIn className="w-5 h-5 text-primary" /></div>
                           <span className="text-foreground text-xs font-bold">Login to Watch</span>
                           <span className="text-muted-foreground text-[10px]">Sign in to access content</span>
                           <span className="mt-1 bg-primary text-primary-foreground text-[11px] font-bold px-5 py-1.5 rounded-lg">Login / Sign Up</span>
                         </>
                       ) : (
                         <>
-                          <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center">
-                            <Crown className="w-5 h-5 text-primary" />
-                          </div>
+                          <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center"><Crown className="w-5 h-5 text-primary" /></div>
                           <span className="text-foreground text-xs font-bold">Subscribe to Watch</span>
                           <span className="text-muted-foreground text-[10px]">From UGX 3,500/day</span>
                           <span className="mt-1 bg-primary text-primary-foreground text-[11px] font-bold px-5 py-1.5 rounded-lg">Subscribe Now</span>
@@ -177,12 +186,8 @@ const MoviePlayerPage = () => {
 
             {/* Actions */}
             <div className="flex items-center gap-3 mb-3 text-[11px] text-muted-foreground">
-              <button onClick={handleShare} className="flex items-center gap-1 hover:text-foreground">
-                <Share2 className="w-3.5 h-3.5" /> Share
-              </button>
-              <button onClick={handleDownload} className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded hover:bg-primary/90 transition-colors font-semibold">
-                <Download className="w-3.5 h-3.5" /> Download
-              </button>
+              <button onClick={handleShare} className="flex items-center gap-1 hover:text-foreground"><Share2 className="w-3.5 h-3.5" /> Share</button>
+              <button onClick={handleDownload} className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded hover:bg-primary/90 transition-colors font-semibold"><Download className="w-3.5 h-3.5" /> Download</button>
             </div>
 
             {/* Title & Info */}
@@ -225,13 +230,7 @@ const MoviePlayerPage = () => {
                 <span className="text-foreground text-xs font-bold mb-2 block">Episodes ({filteredEpisodes.length})</span>
                 <div className="grid grid-cols-6 md:grid-cols-12 gap-1.5">
                   {filteredEpisodes.map((ep, i) => (
-                    <button
-                      key={ep.id}
-                      onClick={() => setActiveEpisode(i)}
-                      className={`py-1.5 rounded text-[10px] font-bold transition-colors ${
-                        i === activeEpisode ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-muted"
-                      }`}
-                    >
+                    <button key={ep.id} onClick={() => setActiveEpisode(i)} className={`py-1.5 rounded text-[10px] font-bold transition-colors ${i === activeEpisode ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground hover:bg-muted"}`}>
                       {ep.episode || i + 1}
                     </button>
                   ))}

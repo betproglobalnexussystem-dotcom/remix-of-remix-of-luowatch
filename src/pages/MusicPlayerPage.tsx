@@ -6,10 +6,15 @@ import { useMusicById, useMusicVideos } from "@/hooks/useFirestore";
 import { incrementMusicPlays, logActivity, getMusicById } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { creditMusicianDownload, isAdminActivatedSub } from "@/lib/earnings";
 import CommentSection from "@/components/CommentSection";
 import LuoWatchPlayer from "@/components/LuoWatchPlayer";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { updateDoc, doc, increment } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+const INTERNAL_ROLES = ["vj", "admin", "musician", "tiktoker"];
 
 const MusicPlayerPage = () => {
   const { id } = useParams();
@@ -46,27 +51,48 @@ const MusicPlayerPage = () => {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!user) { setAuthModalTab("login"); setShowAuthModal(true); return; }
     if (!hasContentAccess) { openSubModal("content"); return; }
-    if (video.videoUrl) {
-      const isCreatorOrAdmin = ["vj", "admin", "musician", "tiktoker"].includes(user?.role?.toLowerCase() || "");
-      if (user && !isCreatorOrAdmin) {
-        // Only count downloads for regular users, not creators/admin
-      }
-      if (user) logActivity({ type: "download", contentType: "music", contentId: id!, contentTitle: video.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
-      // Use worker for Google Drive URLs
-      const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /id=([a-zA-Z0-9_-]+)/, /\/d\/([a-zA-Z0-9_-]+)/];
-      let fileId: string | null = null;
-      for (const p of patterns) { const m = video.videoUrl.match(p); if (m) { fileId = m[1]; break; } }
-      if (fileId) {
-        const fileName = encodeURIComponent(`${video.title}.mp4`);
-        window.location.href = `https://black-band-8860.arthurdimpoz.workers.dev/download?fileId=${fileId}&fileName=${fileName}`;
-      } else {
-        window.location.href = video.videoUrl;
-      }
+    if (!video.videoUrl) { toast.error("No download link"); return; }
+
+    const userRole = user.role?.toLowerCase() || "";
+    const isCreatorOrAdmin = INTERNAL_ROLES.includes(userRole);
+
+    // Only count downloads for subscribed regular users
+    if (!isCreatorOrAdmin) {
+      try {
+        const isAdminSub = await isAdminActivatedSub(user.id);
+        if (!isAdminSub) {
+          // Increment music downloads
+          await updateDoc(doc(db, "music", id!), { downloads: increment(1) });
+          
+          // Credit the musician
+          if (video.musicianId && video.musicianId !== "admin") {
+            creditMusicianDownload(
+              video.musicianId,
+              video.musicianName || video.artist,
+              id!,
+              video.title,
+              user.id,
+              `${user.firstName} ${user.lastName}`.trim() || user.email
+            ).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+
+    logActivity({ type: "download", contentType: "music", contentId: id!, contentTitle: video.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
+
+    // Download via worker for Google Drive URLs
+    const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /id=([a-zA-Z0-9_-]+)/, /\/d\/([a-zA-Z0-9_-]+)/];
+    let fileId: string | null = null;
+    for (const p of patterns) { const m = video.videoUrl.match(p); if (m) { fileId = m[1]; break; } }
+    if (fileId) {
+      const fileName = encodeURIComponent(`${video.title}.mp4`);
+      window.location.href = `https://black-band-8860.arthurdimpoz.workers.dev/download?fileId=${fileId}&fileName=${fileName}`;
     } else {
-      toast.error("No download link");
+      window.location.href = video.videoUrl;
     }
   };
 
