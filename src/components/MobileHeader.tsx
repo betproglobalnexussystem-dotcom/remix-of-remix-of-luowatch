@@ -4,6 +4,7 @@ import { Search, User, LogOut, LayoutDashboard, X, Film, Tv, ChevronDown, Chevro
 import { useAuth } from "@/contexts/AuthContext";
 import { categories } from "@/data/categories";
 import SearchResults from "./SearchResults";
+import InstallAppButton from "./InstallAppButton";
 import logo from "@/assets/logo.png";
 
 const MobileHeader = () => {
@@ -40,7 +41,8 @@ const MobileHeader = () => {
           <img src={logo} alt="LUO WATCH" className="w-6 h-6" />
           <span className="text-primary font-bold text-sm tracking-tight">LUO WATCH</span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <InstallAppButton />
           {isHomePage && (
             <>
               <div className="flex bg-secondary rounded overflow-hidden">

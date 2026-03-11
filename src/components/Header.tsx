@@ -3,6 +3,7 @@ import { User, LogOut, LayoutDashboard, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import SearchResults from "./SearchResults";
+import InstallAppButton from "./InstallAppButton";
 import logo from "@/assets/logo.png";
 
 const Header = () => {
@@ -51,6 +52,7 @@ const Header = () => {
             ))}
           </nav>
           <div className="flex items-center gap-2">
+            <InstallAppButton />
             <SearchResults />
             {user ? (
               <div className="flex items-center gap-1.5">
