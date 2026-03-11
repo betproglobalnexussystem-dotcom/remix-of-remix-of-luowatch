@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   LayoutDashboard, Upload, Music, List, Wallet, ArrowDownToLine,
@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMusicianVideos } from "@/hooks/useFirestore";
 import { addMusicVideo, deleteMusicVideo, updateMusicVideo } from "@/lib/firestore";
 import { sendWithdrawal, formatPhone } from "@/lib/payments";
+import { subscribeCreatorEarning, getCreatorTransactions, recordWithdrawal, getOrCreateEarning, CreatorEarning, EarningTransaction } from "@/lib/earnings";
 
 const sidebarItems = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -18,6 +19,9 @@ const sidebarItems = [
   { id: "manage", label: "Manage Videos", icon: List },
   { id: "wallet", label: "Wallet", icon: Wallet },
 ];
+
+const MONTHLY_THRESHOLD = 10000;
+const MONTHLY_PAYOUT = 50000;
 
 const MusicianDashboard = () => {
   const { user } = useAuth();
@@ -34,10 +38,25 @@ const MusicianDashboard = () => {
   // Wallet
   const [wPhone, setWPhone] = useState(""); const [wAmount, setWAmount] = useState(""); const [withdrawing, setWithdrawing] = useState(false);
 
+  // Earnings from Firestore
+  const [earning, setEarning] = useState<CreatorEarning | null>(null);
+  const [transactions, setTransactions] = useState<EarningTransaction[]>([]);
+
+  useEffect(() => {
+    if (user?.id) {
+      getOrCreateEarning(user.id, `${user.firstName} ${user.lastName}`.trim() || user.email, "musician").catch(() => {});
+      const unsub = subscribeCreatorEarning(user.id, setEarning);
+      getCreatorTransactions(user.id).then(setTransactions).catch(() => {});
+      return unsub;
+    }
+  }, [user?.id]);
+
   const totalPlays = videos.reduce((s, v) => s + (v.plays || 0), 0);
-  const totalDownloads = videos.reduce((s, v) => s + (v.downloads || 0), 0);
-  const totalEarned = Math.floor(totalDownloads / 20) * 5000;
-  const balance = totalEarned;
+  const totalDownloads = earning?.totalDownloads || 0;
+  const monthlyDownloads = earning?.monthlyDownloads || 0;
+  const totalEarned = earning?.totalEarned || 0;
+  const totalWithdrawn = earning?.totalWithdrawn || 0;
+  const balance = earning?.balance || 0;
 
   const now = new Date();
   const isSaturday = now.getDay() === 6;
@@ -69,12 +88,18 @@ const MusicianDashboard = () => {
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isWithdrawWindow) { toast.error("Withdrawals only on Saturdays 12PM - Midnight"); return; }
-    if (!wPhone || !wAmount || Number(wAmount) > balance) { toast.error("Invalid amount or phone"); return; }
+    if (!wPhone || !wAmount || Number(wAmount) <= 0) { toast.error("Invalid amount or phone"); return; }
+    if (Number(wAmount) > balance) { toast.error("Cannot withdraw more than your balance"); return; }
+    if (!user) return;
     setWithdrawing(true);
     try {
       const res = await sendWithdrawal(formatPhone(wPhone), Number(wAmount), "Musician earnings withdrawal");
-      if (res.success) { toast.success("Withdrawal initiated!"); setWPhone(""); setWAmount(""); }
-      else toast.error(res.message || "Failed");
+      if (res.success) {
+        await recordWithdrawal(user.id, `${user.firstName} ${user.lastName}`.trim() || user.email, Number(wAmount), formatPhone(wPhone), "completed");
+        toast.success("Withdrawal initiated!");
+        setWPhone(""); setWAmount("");
+        getCreatorTransactions(user.id).then(setTransactions).catch(() => {});
+      } else toast.error(res.message || "Failed");
     } catch { toast.error("Withdrawal failed"); }
     setWithdrawing(false);
   };
@@ -85,9 +110,11 @@ const MusicianDashboard = () => {
   const stats = [
     { label: "Total Videos", value: String(videos.length), icon: Music, color: "text-primary" },
     { label: "Total Plays", value: String(totalPlays), icon: Play, color: "text-badge-hd" },
-    { label: "Downloads", value: String(totalDownloads), icon: Download, color: "text-badge-new" },
+    { label: "Monthly Downloads", value: `${monthlyDownloads} / ${MONTHLY_THRESHOLD}`, icon: Download, color: "text-badge-new" },
     { label: "Balance", value: formatUGX(balance), icon: DollarSign, color: "text-accent" },
   ];
+
+  const milestoneProgress = Math.min((monthlyDownloads / MONTHLY_THRESHOLD) * 100, 100);
 
   return (
     <div className="min-h-screen bg-background">
@@ -118,6 +145,21 @@ const MusicianDashboard = () => {
           {activeTab === "overview" && (
             <div>
               <h2 className="text-foreground text-sm font-bold mb-4">Overview</h2>
+              
+              {/* Monthly Milestone Progress */}
+              <div className="bg-card border border-border rounded-lg p-3 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-foreground text-[11px] font-bold">🎯 Monthly Download Milestone</span>
+                  <span className="text-[10px] text-muted-foreground">{monthlyDownloads} / {MONTHLY_THRESHOLD.toLocaleString()}</span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-3 mb-1.5 overflow-hidden">
+                  <div className="bg-gradient-to-r from-primary to-accent h-3 rounded-full transition-all" style={{ width: `${milestoneProgress}%` }} />
+                </div>
+                <p className="text-[9px] text-muted-foreground">
+                  Reach {MONTHLY_THRESHOLD.toLocaleString()} confirmed downloads this month to earn <span className="text-primary font-bold">{formatUGX(MONTHLY_PAYOUT)}</span>
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                 {stats.map((s) => (
                   <div key={s.label} className="bg-card border border-border rounded-lg p-3">
@@ -204,13 +246,14 @@ const MusicianDashboard = () => {
           {activeTab === "wallet" && (
             <div>
               <h2 className="text-foreground text-sm font-bold mb-4">Wallet</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
                 <div className="bg-card border border-border rounded-lg p-4"><p className="text-[10px] text-muted-foreground mb-1">Available Balance</p><p className="text-primary text-xl font-bold">{formatUGX(balance)}</p></div>
                 <div className="bg-card border border-border rounded-lg p-4"><p className="text-[10px] text-muted-foreground mb-1">Total Earned</p><p className="text-foreground text-xl font-bold">{formatUGX(totalEarned)}</p></div>
-                <div className="bg-card border border-border rounded-lg p-4"><p className="text-[10px] text-muted-foreground mb-1">Downloads</p><p className="text-foreground text-xl font-bold">{totalDownloads}</p></div>
+                <div className="bg-card border border-border rounded-lg p-4"><p className="text-[10px] text-muted-foreground mb-1">Withdrawn</p><p className="text-foreground text-xl font-bold">{formatUGX(totalWithdrawn)}</p></div>
+                <div className="bg-card border border-border rounded-lg p-4"><p className="text-[10px] text-muted-foreground mb-1">Monthly Downloads</p><p className="text-foreground text-xl font-bold">{monthlyDownloads} / {MONTHLY_THRESHOLD.toLocaleString()}</p></div>
               </div>
 
-              <div className="bg-card border border-border rounded-lg p-4 max-w-sm">
+              <div className="bg-card border border-border rounded-lg p-4 max-w-sm mb-4">
                 <h3 className="text-foreground text-xs font-bold mb-2">Withdraw to Mobile Money</h3>
                 {!isWithdrawWindow && <p className="text-destructive text-[10px] mb-2">⚠ Withdrawals open Saturdays 12PM - Midnight</p>}
                 <form className="space-y-3" onSubmit={handleWithdraw}>
@@ -220,6 +263,43 @@ const MusicianDashboard = () => {
                     {withdrawing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Processing...</> : <><ArrowDownToLine className="w-3.5 h-3.5" /> Withdraw</>}
                   </button>
                 </form>
+              </div>
+
+              <h3 className="text-foreground text-xs font-bold mb-2">Recent Transactions</h3>
+              <div className="bg-card border border-border rounded-lg p-3 mb-4">
+                {transactions.length === 0 ? <p className="text-muted-foreground text-[10px]">No transactions yet.</p> : (
+                  <div className="overflow-x-auto max-h-64">
+                    <table className="w-full text-[10px]">
+                      <thead><tr className="border-b border-border">
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Type</th>
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Amount</th>
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Details</th>
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Date</th>
+                      </tr></thead>
+                      <tbody>
+                        {transactions.slice(0, 20).map((tx) => (
+                          <tr key={tx.id} className="border-b border-border last:border-0">
+                            <td className="p-1.5"><span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", tx.type === "milestone_bonus" ? "bg-primary/20 text-primary" : tx.type === "withdrawal" ? "bg-yellow-500/20 text-yellow-400" : "bg-green-500/20 text-green-400")}>{tx.type === "milestone_bonus" ? "Bonus" : tx.type === "withdrawal" ? "Withdraw" : "Download"}</span></td>
+                            <td className="p-1.5 text-foreground font-bold">{tx.type === "withdrawal" ? `-${formatUGX(tx.amount)}` : tx.amount > 0 ? `+${formatUGX(tx.amount)}` : "—"}</td>
+                            <td className="p-1.5 text-muted-foreground truncate max-w-[150px]">{tx.contentTitle || tx.phone || "—"}</td>
+                            <td className="p-1.5 text-muted-foreground">{tx.createdAt?.toDate ? tx.createdAt.toDate().toLocaleDateString() : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-3">
+                <h4 className="text-foreground text-[11px] font-bold mb-2">Earning Rules</h4>
+                <ul className="text-[10px] text-muted-foreground space-y-1">
+                  <li>• Reach <span className="text-primary font-bold">{MONTHLY_THRESHOLD.toLocaleString()} confirmed downloads</span> in a month = <span className="text-primary font-bold">{formatUGX(MONTHLY_PAYOUT)}</span></li>
+                  <li>• Only downloads by paying subscribers count (VJ/admin/artist downloads excluded)</li>
+                  <li>• Monthly counter resets at the start of each month</li>
+                  <li>• Withdrawals available every Saturday 12 PM – Midnight</li>
+                  <li>• Cannot withdraw more than your balance</li>
+                </ul>
               </div>
             </div>
           )}

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useVJMovies } from "@/hooks/useFirestore";
 import { addMovie, deleteMovie, updateMovie, addEpisode, deleteEpisode, updateEpisode, getEpisodesByVJ, FireEpisode } from "@/lib/firestore";
+import { subscribeCreatorEarning, getCreatorTransactions, recordWithdrawal, getOrCreateEarning, CreatorEarning, EarningTransaction } from "@/lib/earnings";
 import { genreList } from "@/data/categories";
 
 const sidebarItems = [
@@ -29,6 +30,10 @@ const VJDashboard = () => {
   const [manageSubTab, setManageSubTab] = useState<"movies" | "series">("movies");
   const [episodes, setEpisodes] = useState<FireEpisode[]>([]);
 
+  // Earnings from Firestore
+  const [earning, setEarning] = useState<CreatorEarning | null>(null);
+  const [transactions, setTransactions] = useState<EarningTransaction[]>([]);
+
   // Movie form
   const [mTitle, setMTitle] = useState("");
   const [mYear, setMYear] = useState("");
@@ -37,7 +42,7 @@ const VJDashboard = () => {
   const [mPosterUrl, setMPosterUrl] = useState("");
   const [mMovieUrl, setMMovieUrl] = useState("");
 
-  // Series form (upload new series)
+  // Series form
   const [sTitle, setSTitle] = useState("");
   const [sYear, setSYear] = useState("");
   const [sGenre, setSGenre] = useState("");
@@ -60,16 +65,25 @@ const VJDashboard = () => {
   const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null);
   const [editEp, setEditEp] = useState({ season: "", episode: "", episodeTitle: "", episodeUrl: "" });
 
-  // Episode management per series
   const [managingSeriesId, setManagingSeriesId] = useState<string | null>(null);
-  // Add episode inline
   const [showAddEpisode, setShowAddEpisode] = useState(false);
-
   const [isUploading, setIsUploading] = useState(false);
+
+  // Wallet
+  const [wPhone, setWPhone] = useState("");
+  const [wAmount, setWAmount] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
       getEpisodesByVJ(user.id).then(setEpisodes).catch(() => {});
+      // Initialize earning record
+      getOrCreateEarning(user.id, `${user.firstName} ${user.lastName}`.trim() || user.email, "vj").catch(() => {});
+      // Subscribe to real-time earnings
+      const unsub = subscribeCreatorEarning(user.id, setEarning);
+      // Load transactions
+      getCreatorTransactions(user.id).then(setTransactions).catch(() => {});
+      return unsub;
     }
   }, [user?.id]);
 
@@ -120,19 +134,11 @@ const VJDashboard = () => {
   };
 
   const handleSaveEditMovie = async (id: string) => {
-    try {
-      await updateMovie(id, { ...editMovie });
-      setEditingMovieId(null);
-      toast.success("Updated!");
-    } catch { toast.error("Update failed"); }
+    try { await updateMovie(id, { ...editMovie }); setEditingMovieId(null); toast.success("Updated!"); } catch { toast.error("Update failed"); }
   };
 
   const handleSaveEditSeries = async (id: string) => {
-    try {
-      await updateMovie(id, { ...editSeries });
-      setEditingSeriesId(null);
-      toast.success("Updated!");
-    } catch { toast.error("Update failed"); }
+    try { await updateMovie(id, { ...editSeries }); setEditingSeriesId(null); toast.success("Updated!"); } catch { toast.error("Update failed"); }
   };
 
   const toggleFeatured = async (id: string, current: boolean) => {
@@ -165,21 +171,14 @@ const VJDashboard = () => {
   };
 
   const handleSaveEditEpisode = async (id: string) => {
-    try {
-      await updateEpisode(id, { ...editEp });
-      setEditingEpisodeId(null);
-      await refreshEpisodes();
-      toast.success("Episode updated!");
-    } catch { toast.error("Update failed"); }
+    try { await updateEpisode(id, { ...editEp }); setEditingEpisodeId(null); await refreshEpisodes(); toast.success("Episode updated!"); } catch { toast.error("Update failed"); }
   };
 
-  const totalDownloads = movies.reduce((s, m) => s + (m.downloads || 0), 0);
-  const totalEarned = Math.floor(totalDownloads / 20) * 5000;
-  const [withdrawn, setWithdrawn] = useState(0);
-  const balance = totalEarned - withdrawn;
-  const [wPhone, setWPhone] = useState("");
-  const [wAmount, setWAmount] = useState("");
-  const [withdrawing, setWithdrawing] = useState(false);
+  // Earnings from Firestore (real data)
+  const totalDownloads = earning?.totalDownloads || 0;
+  const totalEarned = earning?.totalEarned || 0;
+  const totalWithdrawn = earning?.totalWithdrawn || 0;
+  const balance = earning?.balance || 0;
 
   const now = new Date();
   const isSaturday = now.getDay() === 6;
@@ -191,7 +190,7 @@ const VJDashboard = () => {
   const stats = [
     { label: "Total Movies", value: String(movies.length), icon: Film, color: "text-primary" },
     { label: "Total Views", value: String(movies.reduce((s, m) => s + (m.views || 0), 0)), icon: Eye, color: "text-badge-hd" },
-    { label: "Downloads", value: String(totalDownloads), icon: Download, color: "text-badge-new" },
+    { label: "Confirmed Downloads", value: String(totalDownloads), icon: Download, color: "text-badge-new" },
     { label: "Balance", value: formatUGX(balance), icon: DollarSign, color: "text-accent" },
   ];
 
@@ -199,6 +198,29 @@ const VJDashboard = () => {
   const seriesMovies = movies.filter(m => m.type === "series");
   const managingSeriesEpisodes = episodes.filter(ep => ep.movieId === managingSeriesId);
   const inputCls = "w-full bg-secondary text-foreground text-xs px-3 py-2 rounded border border-border focus:outline-none focus:ring-1 focus:ring-primary";
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isWithdrawWindow) { toast.error("Withdrawals only on Saturday 12 PM – Midnight"); return; }
+    if (!wAmount || Number(wAmount) <= 0) { toast.error("Enter a valid amount"); return; }
+    if (Number(wAmount) > balance) { toast.error("Cannot withdraw more than your balance"); return; }
+    if (!wPhone) { toast.error("Enter phone number"); return; }
+    if (!user) return;
+    setWithdrawing(true);
+    try {
+      const res = await sendWithdrawal(formatPhone(wPhone), Number(wAmount), "VJ earnings withdrawal");
+      if (res.success) {
+        await recordWithdrawal(user.id, `${user.firstName} ${user.lastName}`.trim() || user.email, Number(wAmount), formatPhone(wPhone), "completed");
+        toast.success(`Withdrawal of ${formatUGX(Number(wAmount))} initiated!`);
+        setWAmount(""); setWPhone("");
+        // Refresh transactions
+        getCreatorTransactions(user.id).then(setTransactions).catch(() => {});
+      } else {
+        toast.error(res.message || "Withdrawal failed");
+      }
+    } catch { toast.error("Withdrawal failed"); }
+    setWithdrawing(false);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -234,17 +256,15 @@ const VJDashboard = () => {
               <h2 className="text-foreground text-sm font-bold mb-4">Overview</h2>
               <div className="bg-card border border-border rounded-lg p-3 mb-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-foreground text-[11px] font-bold">💰 Earnings Status</span>
-                </div>
-                <div className="w-full bg-secondary rounded-full h-4 mb-1.5 relative overflow-hidden">
-                  <div className="bg-gradient-to-r from-primary to-accent h-4 rounded-full transition-all" style={{ width: `${totalDownloads > 0 ? ((totalDownloads % 20) / 20) * 100 || 100 : 0}%` }} />
+                  <span className="text-foreground text-[11px] font-bold">💰 Earnings Status (UGX 250 per confirmed download)</span>
                 </div>
                 <div className="grid grid-cols-4 gap-2 pt-2 border-t border-border">
-                  <div><p className="text-[9px] text-muted-foreground">Downloads</p><p className="text-foreground text-xs font-bold">{totalDownloads}</p></div>
+                  <div><p className="text-[9px] text-muted-foreground">Confirmed Downloads</p><p className="text-foreground text-xs font-bold">{totalDownloads}</p></div>
                   <div><p className="text-[9px] text-muted-foreground">Earned</p><p className="text-foreground text-xs font-bold">{formatUGX(totalEarned)}</p></div>
-                  <div><p className="text-[9px] text-muted-foreground">Withdrawn</p><p className="text-foreground text-xs font-bold">{formatUGX(withdrawn)}</p></div>
+                  <div><p className="text-[9px] text-muted-foreground">Withdrawn</p><p className="text-foreground text-xs font-bold">{formatUGX(totalWithdrawn)}</p></div>
                   <div><p className="text-[9px] text-muted-foreground">Balance</p><p className="text-primary text-xs font-bold">{formatUGX(balance)}</p></div>
                 </div>
+                <p className="text-[9px] text-muted-foreground mt-2">Only downloads by paying subscribers count. VJ/admin/artist downloads are excluded.</p>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                 {stats.map((s) => (
@@ -263,7 +283,6 @@ const VJDashboard = () => {
                       <th className="text-left text-muted-foreground font-semibold p-2">Title</th>
                       <th className="text-left text-muted-foreground font-semibold p-2">Type</th>
                       <th className="text-left text-muted-foreground font-semibold p-2">Views</th>
-                      <th className="text-left text-muted-foreground font-semibold p-2">Downloads</th>
                     </tr></thead>
                     <tbody>
                       {movies.slice(0, 5).map((m) => (
@@ -271,7 +290,6 @@ const VJDashboard = () => {
                           <td className="p-2 text-foreground font-semibold">{m.title}</td>
                           <td className="p-2"><span className={cn("text-[9px] px-1.5 py-0.5 rounded font-bold", m.type === "series" ? "bg-accent text-accent-foreground" : "bg-badge-new text-primary-foreground")}>{m.type === "series" ? "Series" : "Movie"}</span></td>
                           <td className="p-2 text-muted-foreground">{m.views}</td>
-                          <td className="p-2 text-muted-foreground">{m.downloads}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -298,10 +316,8 @@ const VJDashboard = () => {
                     </div>
                   </div>
                   <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Description</label><textarea className={`${inputCls} h-20 resize-none`} placeholder="Description..." value={mDesc} onChange={e => setMDesc(e.target.value)} /></div>
-
                   <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Poster Image URL</label><input className={inputCls} placeholder="Paste poster image URL..." value={mPosterUrl} onChange={e => setMPosterUrl(e.target.value)} /></div>
                   <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Movie Link *</label><input className={inputCls} placeholder="Paste movie/stream link..." value={mMovieUrl} onChange={e => setMMovieUrl(e.target.value)} /></div>
-
                   <button type="submit" disabled={isUploading} className="bg-primary text-primary-foreground px-6 py-2 rounded text-xs font-bold hover:bg-primary/90 transition-colors flex items-center gap-1.5 disabled:opacity-50">
                     {isUploading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><Plus className="w-3.5 h-3.5" /> Upload Movie</>}
                   </button>
@@ -367,7 +383,6 @@ const VJDashboard = () => {
           {activeTab === "manage-content" && (
             <div>
               <h2 className="text-foreground text-sm font-bold mb-3">Manage Content</h2>
-              {/* Sub tabs */}
               <div className="flex gap-1 mb-4">
                 <button onClick={() => { setManageSubTab("movies"); setManagingSeriesId(null); }} className={cn("px-3 py-1.5 rounded text-[11px] font-bold transition-colors", manageSubTab === "movies" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground")}>
                   <Film className="w-3 h-3 inline mr-1" />Movies
@@ -377,7 +392,6 @@ const VJDashboard = () => {
                 </button>
               </div>
 
-              {/* MOVIES SUB TAB */}
               {manageSubTab === "movies" && (
                 <div>
                   {onlyMovies.length === 0 ? <p className="text-muted-foreground text-xs">No movies yet.</p> : (
@@ -422,10 +436,9 @@ const VJDashboard = () => {
                 </div>
               )}
 
-              {/* SERIES SUB TAB */}
               {manageSubTab === "series" && !managingSeriesId && (
                 <div>
-                  {seriesMovies.length === 0 ? <p className="text-muted-foreground text-xs">No series yet. Create one from "Upload Series".</p> : (
+                  {seriesMovies.length === 0 ? <p className="text-muted-foreground text-xs">No series yet.</p> : (
                     <div className="bg-card border border-border rounded-lg overflow-hidden">
                       <table className="w-full text-[11px]">
                         <thead><tr className="border-b border-border">
@@ -471,7 +484,6 @@ const VJDashboard = () => {
                 </div>
               )}
 
-              {/* EPISODE MANAGEMENT FOR A SERIES */}
               {manageSubTab === "series" && managingSeriesId && (
                 <div>
                   <button onClick={() => { setManagingSeriesId(null); setShowAddEpisode(false); }} className="text-primary text-[11px] font-bold flex items-center gap-1 mb-3"><ChevronLeft className="w-3 h-3" /> Back to Series</button>
@@ -488,10 +500,7 @@ const VJDashboard = () => {
                           <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Episode *</label><input className={inputCls} placeholder="1" value={eEpisode} onChange={e => setEEpisode(e.target.value)} /></div>
                           <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Ep. Title</label><input className={inputCls} placeholder="Title" value={eEpisodeTitle} onChange={e => setEEpisodeTitle(e.target.value)} /></div>
                         </div>
-                        <div>
-                          <label className="text-foreground text-[10px] font-semibold mb-0.5 block">Episode Link *</label>
-                          <input className={inputCls} placeholder="Paste video link..." value={eEpisodeUrl} onChange={e => setEEpisodeUrl(e.target.value)} />
-                        </div>
+                        <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Episode Link *</label><input className={inputCls} placeholder="Paste video link..." value={eEpisodeUrl} onChange={e => setEEpisodeUrl(e.target.value)} /></div>
                         <button type="submit" disabled={isUploading} className="bg-primary text-primary-foreground px-4 py-1.5 rounded text-[10px] font-bold hover:bg-primary/90 flex items-center gap-1 disabled:opacity-50">
                           {isUploading ? <><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</> : <><Plus className="w-3 h-3" /> Add</>}
                         </button>
@@ -499,7 +508,7 @@ const VJDashboard = () => {
                     </div>
                   )}
 
-                  {managingSeriesEpisodes.length === 0 ? <p className="text-muted-foreground text-xs">No episodes yet. Add one above.</p> : (
+                  {managingSeriesEpisodes.length === 0 ? <p className="text-muted-foreground text-xs">No episodes yet.</p> : (
                     <div className="bg-card border border-border rounded-lg overflow-hidden">
                       <table className="w-full text-[11px]">
                         <thead><tr className="border-b border-border">
@@ -549,30 +558,27 @@ const VJDashboard = () => {
           {activeTab === "wallet" && (
             <div>
               <h2 className="text-foreground text-sm font-bold mb-3">Wallet</h2>
-              <div className="bg-card border border-border rounded-lg p-3 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-foreground text-[11px] font-bold">Earnings Progress</span>
-                </div>
-                <div className="w-full bg-secondary rounded-full h-3 mb-1.5">
-                  <div className="bg-primary h-3 rounded-full transition-all" style={{ width: `${Math.min(((totalDownloads % 20) / 20) * 100, 100)}%` }} />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
                 <div className="bg-card border border-border rounded-lg p-2.5">
-                  <div className="flex items-center justify-between mb-1"><DollarSign className="w-3.5 h-3.5 text-primary" /><BarChart3 className="w-2.5 h-2.5 text-muted-foreground" /></div>
+                  <div className="flex items-center justify-between mb-1"><DollarSign className="w-3.5 h-3.5 text-primary" /></div>
                   <p className="text-foreground text-sm font-bold">{formatUGX(balance)}</p>
-                  <p className="text-[9px] text-muted-foreground">Balance</p>
+                  <p className="text-[9px] text-muted-foreground">Available Balance</p>
                 </div>
                 <div className="bg-card border border-border rounded-lg p-2.5">
-                  <div className="flex items-center justify-between mb-1"><Receipt className="w-3.5 h-3.5 text-badge-hd" /><BarChart3 className="w-2.5 h-2.5 text-muted-foreground" /></div>
+                  <div className="flex items-center justify-between mb-1"><Receipt className="w-3.5 h-3.5 text-badge-hd" /></div>
                   <p className="text-foreground text-sm font-bold">{formatUGX(totalEarned)}</p>
                   <p className="text-[9px] text-muted-foreground">Total Earned</p>
                 </div>
                 <div className="bg-card border border-border rounded-lg p-2.5">
-                  <div className="flex items-center justify-between mb-1"><ArrowDownToLine className="w-3.5 h-3.5 text-badge-new" /><BarChart3 className="w-2.5 h-2.5 text-muted-foreground" /></div>
-                  <p className="text-foreground text-sm font-bold">{formatUGX(withdrawn)}</p>
+                  <div className="flex items-center justify-between mb-1"><ArrowDownToLine className="w-3.5 h-3.5 text-badge-new" /></div>
+                  <p className="text-foreground text-sm font-bold">{formatUGX(totalWithdrawn)}</p>
                   <p className="text-[9px] text-muted-foreground">Withdrawn</p>
+                </div>
+                <div className="bg-card border border-border rounded-lg p-2.5">
+                  <div className="flex items-center justify-between mb-1"><Download className="w-3.5 h-3.5 text-accent" /></div>
+                  <p className="text-foreground text-sm font-bold">{totalDownloads}</p>
+                  <p className="text-[9px] text-muted-foreground">Confirmed Downloads</p>
                 </div>
               </div>
 
@@ -583,20 +589,7 @@ const VJDashboard = () => {
                 </div>
               )}
               <div className="bg-card border border-border rounded-lg p-3 max-w-sm mb-4">
-                <form className="space-y-2" onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!isWithdrawWindow) { toast.error("Withdrawals only on Saturday 12 PM – Midnight"); return; }
-                  if (!wAmount || Number(wAmount) <= 0) { toast.error("Enter a valid amount"); return; }
-                  if (Number(wAmount) > balance) { toast.error("Insufficient balance"); return; }
-                  if (!wPhone) { toast.error("Enter phone number"); return; }
-                  setWithdrawing(true);
-                  try {
-                    const res = await sendWithdrawal(formatPhone(wPhone), Number(wAmount), "VJ earnings withdrawal");
-                    if (res.success) { setWithdrawn(prev => prev + Number(wAmount)); toast.success(`Withdrawal of ${formatUGX(Number(wAmount))} initiated!`); setWAmount(""); setWPhone(""); }
-                    else toast.error(res.message || "Withdrawal failed");
-                  } catch { toast.error("Withdrawal failed"); }
-                  setWithdrawing(false);
-                }}>
+                <form className="space-y-2" onSubmit={handleWithdraw}>
                   <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Amount (UGX)</label><input value={wAmount} onChange={e => setWAmount(e.target.value)} className={inputCls} placeholder="Enter amount" type="number" disabled={!isWithdrawWindow} /></div>
                   <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Mobile Money Number</label><input value={wPhone} onChange={e => setWPhone(e.target.value)} className={inputCls} placeholder="0770 000 000" disabled={!isWithdrawWindow} /></div>
                   <button type="submit" disabled={!isWithdrawWindow || balance <= 0 || withdrawing} className="bg-primary text-primary-foreground px-4 py-1.5 rounded text-[10px] font-bold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1">
@@ -605,16 +598,40 @@ const VJDashboard = () => {
                 </form>
               </div>
 
-              <h3 className="text-foreground text-[11px] font-bold mb-2">Earning Summary</h3>
+              <h3 className="text-foreground text-[11px] font-bold mb-2">Recent Transactions</h3>
               <div className="bg-card border border-border rounded-lg p-3">
-                <table className="w-full text-[10px]">
-                  <tbody>
-                    <tr className="border-b border-border"><td className="p-1.5 text-muted-foreground">Total Downloads</td><td className="p-1.5 text-foreground font-bold text-right">{totalDownloads}</td></tr>
-                    <tr className="border-b border-border"><td className="p-1.5 text-muted-foreground">Earned</td><td className="p-1.5 text-foreground font-bold text-right">{formatUGX(totalEarned)}</td></tr>
-                    <tr className="border-b border-border"><td className="p-1.5 text-muted-foreground">Withdrawn</td><td className="p-1.5 text-foreground font-bold text-right">{formatUGX(withdrawn)}</td></tr>
-                    <tr><td className="p-1.5 text-muted-foreground">Available Balance</td><td className="p-1.5 text-primary font-bold text-right">{formatUGX(balance)}</td></tr>
-                  </tbody>
-                </table>
+                {transactions.length === 0 ? <p className="text-muted-foreground text-[10px]">No transactions yet.</p> : (
+                  <div className="overflow-x-auto max-h-64">
+                    <table className="w-full text-[10px]">
+                      <thead><tr className="border-b border-border">
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Type</th>
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Amount</th>
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Details</th>
+                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Date</th>
+                      </tr></thead>
+                      <tbody>
+                        {transactions.slice(0, 20).map((tx) => (
+                          <tr key={tx.id} className="border-b border-border last:border-0">
+                            <td className="p-1.5"><span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", tx.type === "download_credit" ? "bg-green-500/20 text-green-400" : tx.type === "withdrawal" ? "bg-yellow-500/20 text-yellow-400" : "bg-primary/20 text-primary")}>{tx.type === "download_credit" ? "Download" : tx.type === "withdrawal" ? "Withdraw" : "Bonus"}</span></td>
+                            <td className="p-1.5 text-foreground font-bold">{tx.type === "withdrawal" ? `-${formatUGX(tx.amount)}` : `+${formatUGX(tx.amount)}`}</td>
+                            <td className="p-1.5 text-muted-foreground truncate max-w-[150px]">{tx.contentTitle || tx.phone || "—"}</td>
+                            <td className="p-1.5 text-muted-foreground">{tx.createdAt?.toDate ? tx.createdAt.toDate().toLocaleDateString() : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-3 mt-4">
+                <h4 className="text-foreground text-[11px] font-bold mb-2">Earning Rules</h4>
+                <ul className="text-[10px] text-muted-foreground space-y-1">
+                  <li>• Each confirmed download by a paying subscriber = <span className="text-primary font-bold">UGX 250</span></li>
+                  <li>• Downloads by VJs, musicians, admins, or admin-activated users do NOT count</li>
+                  <li>• Withdrawals available every Saturday 12 PM – Midnight</li>
+                  <li>• You cannot withdraw more than your available balance</li>
+                </ul>
               </div>
             </div>
           )}
