@@ -50,6 +50,10 @@ const MusicPlayerPage = () => {
     if (!user) { setAuthModalTab("login"); setShowAuthModal(true); return; }
     if (!hasContentAccess) { openSubModal("content"); return; }
     if (video.videoUrl) {
+      const isCreatorOrAdmin = ["vj", "admin", "musician", "tiktoker"].includes(user?.role?.toLowerCase() || "");
+      if (user && !isCreatorOrAdmin) {
+        // Only count downloads for regular users, not creators/admin
+      }
       if (user) logActivity({ type: "download", contentType: "music", contentId: id!, contentTitle: video.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
       // Use worker for Google Drive URLs
       const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /id=([a-zA-Z0-9_-]+)/, /\/d\/([a-zA-Z0-9_-]+)/];

@@ -60,7 +60,10 @@ const MoviePlayerPage = () => {
     if (!hasContentAccess) { openSubModal("content"); return; }
     const url = movie.movieUrl || videoUrl;
     if (url) {
-      incrementMovieDownloads(id!).catch(() => {});
+      const isCreatorOrAdmin = ["vj", "admin", "musician", "tiktoker"].includes(user.role?.toLowerCase() || "");
+      if (!isCreatorOrAdmin) {
+        incrementMovieDownloads(id!).catch(() => {});
+      }
       logActivity({ type: "download", contentType: "movie", contentId: id!, contentTitle: movie.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
       
       const fileId = getGDriveFileId(url);
