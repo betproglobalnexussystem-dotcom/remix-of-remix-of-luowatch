@@ -20,8 +20,9 @@ import { toast } from "sonner";
 import {
   Users, Film, Music, Video, Tv, BarChart3, Trash2, Edit, Eye,
   Plus, Search, Shield, Crown, DollarSign, RefreshCw, X, Check,
-  Download, UserPlus, Upload, Wallet, List, Loader2, ArrowDownToLine, Image
+  Download, UserPlus, Upload, Wallet, List, Loader2, ArrowDownToLine, Image, TrendingUp
 } from "lucide-react";
+import { getAllCreatorEarnings, getAllEarningTransactions, resetAllContentCounts, CreatorEarning, EarningTransaction } from "@/lib/earnings";
 import { cn } from "@/lib/utils";
 import { genreList } from "@/data/categories";
 
