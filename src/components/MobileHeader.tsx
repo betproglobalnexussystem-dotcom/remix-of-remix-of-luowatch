@@ -4,6 +4,7 @@ import { Search, User, LogOut, LayoutDashboard, X, Film, Tv, ChevronDown, Chevro
 import { useAuth } from "@/contexts/AuthContext";
 import { categories } from "@/data/categories";
 import SearchResults from "./SearchResults";
+import InstallAppButton from "./InstallAppButton";
 import logo from "@/assets/logo.png";
 
 const MobileHeader = () => {
