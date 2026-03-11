@@ -55,7 +55,7 @@ const InstallAppButton = () => {
 
   if (isInstalled) {
     return (
-      <div className="flex items-center gap-1 text-green-500 text-[10px] font-semibold px-2 py-1">
+      <div className="flex items-center gap-1 text-primary text-[10px] font-semibold px-2 py-1">
         <Check className="w-3 h-3" /> Installed
       </div>
     );
