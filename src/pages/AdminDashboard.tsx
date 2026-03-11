@@ -46,6 +46,7 @@ const AdminDashboard = () => {
     { id: "subscriptions", label: "Subscriptions", icon: Crown },
     { id: "wallet", label: "Wallet", icon: Wallet },
     { id: "carousel", label: "Carousel", icon: Image },
+    { id: "earnings", label: "Creator Earnings", icon: TrendingUp },
   ];
 
   return (
