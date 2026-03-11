@@ -3,6 +3,7 @@ import { User, LogOut, LayoutDashboard, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import SearchResults from "./SearchResults";
+import InstallAppButton from "./InstallAppButton";
 import logo from "@/assets/logo.png";
 
 const Header = () => {
