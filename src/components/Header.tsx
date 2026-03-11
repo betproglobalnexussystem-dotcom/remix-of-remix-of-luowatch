@@ -52,6 +52,7 @@ const Header = () => {
             ))}
           </nav>
           <div className="flex items-center gap-2">
+            <InstallAppButton />
             <SearchResults />
             {user ? (
               <div className="flex items-center gap-1.5">
