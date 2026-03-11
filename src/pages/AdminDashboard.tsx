@@ -28,7 +28,7 @@ import { genreList } from "@/data/categories";
 
 const ADMIN_EMAIL = "mainplatform.nexus@gmail.com";
 
-type Tab = "overview" | "add-creator" | "users" | "upload" | "manage" | "subscriptions" | "wallet" | "carousel";
+type Tab = "overview" | "add-creator" | "users" | "upload" | "manage" | "subscriptions" | "wallet" | "carousel" | "earnings";
 
 const AdminDashboard = () => {
   const { user, isLoading } = useAuth();
