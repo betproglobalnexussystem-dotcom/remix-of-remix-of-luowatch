@@ -97,7 +97,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }) => {
     try {
       const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      await updateProfile(cred.user, { displayName: `${data.firstName} ${data.lastName}` });
+      // Save profile FIRST before onAuthStateChanged can race
       await saveProfileToFirestore(cred.user.uid, {
         firstName: data.firstName,
         lastName: data.lastName,
@@ -105,7 +105,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         phone: data.phone,
         email: data.email,
       });
-      const u = await buildUser(cred.user);
+      await updateProfile(cred.user, { displayName: `${data.firstName} ${data.lastName}` });
+      const u: User = {
+        id: cred.user.uid,
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role: data.role,
+        phone: data.phone,
+      };
       setUser(u);
       setShowAuthModal(false);
       return { success: true };

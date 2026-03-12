@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { creditMusicianDownload, isAdminActivatedSub } from "@/lib/earnings";
 import CommentSection from "@/components/CommentSection";
-import LuoWatchPlayer from "@/components/LuoWatchPlayer";
+import AppleMusicPlayer from "@/components/AppleMusicPlayer";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { updateDoc, doc, increment } from "firebase/firestore";
@@ -59,15 +59,11 @@ const MusicPlayerPage = () => {
     const userRole = user.role?.toLowerCase() || "";
     const isCreatorOrAdmin = INTERNAL_ROLES.includes(userRole);
 
-    // Only count downloads for subscribed regular users
     if (!isCreatorOrAdmin) {
       try {
         const isAdminSub = await isAdminActivatedSub(user.id);
         if (!isAdminSub) {
-          // Increment music downloads
           await updateDoc(doc(db, "music", id!), { downloads: increment(1) });
-          
-          // Credit the musician
           if (video.musicianId && video.musicianId !== "admin") {
             creditMusicianDownload(
               video.musicianId,
@@ -84,16 +80,14 @@ const MusicPlayerPage = () => {
 
     logActivity({ type: "download", contentType: "music", contentId: id!, contentTitle: video.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
 
-    // Download via worker for Google Drive URLs
-    const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /id=([a-zA-Z0-9_-]+)/, /\/d\/([a-zA-Z0-9_-]+)/];
-    let fileId: string | null = null;
-    for (const p of patterns) { const m = video.videoUrl.match(p); if (m) { fileId = m[1]; break; } }
-    if (fileId) {
-      const fileName = encodeURIComponent(`${video.title}.mp4`);
-      window.location.href = `https://black-band-8860.arthurdimpoz.workers.dev/download?fileId=${fileId}&fileName=${fileName}`;
-    } else {
-      window.location.href = video.videoUrl;
-    }
+    // Direct download for R2 URLs
+    const a = document.createElement("a");
+    a.href = video.videoUrl;
+    a.download = `${video.title}.mp4`;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (
@@ -101,9 +95,14 @@ const MusicPlayerPage = () => {
       <div className="max-w-7xl mx-auto px-3 py-3">
         <div className="flex gap-4">
           <main className="flex-1 min-w-0">
-            <div className="relative aspect-video bg-black rounded-lg overflow-hidden mb-3">
+            <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-3 shadow-lg">
               {video.videoUrl ? (
-                <LuoWatchPlayer src={video.videoUrl} poster={video.thumbnailUrl} title={video.title} />
+                <AppleMusicPlayer
+                  src={video.videoUrl}
+                  poster={video.thumbnailUrl}
+                  title={video.title}
+                  artist={video.musicianName || video.artist}
+                />
               ) : video.thumbnailUrl ? (
                 <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
               ) : (
