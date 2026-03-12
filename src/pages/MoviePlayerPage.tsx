@@ -56,19 +56,34 @@ const MoviePlayerPage = () => {
   const handleDownload = async () => {
     if (!user) { setAuthModalTab("login"); setShowAuthModal(true); return; }
     if (!hasContentAccess) { openSubModal("content"); return; }
-    const url = movie.movieUrl || videoUrl;
-    if (!url) { toast.error("No download link available"); return; }
-
+    
     const userRole = user.role?.toLowerCase() || "";
     const isCreatorOrAdmin = INTERNAL_ROLES.includes(userRole);
+
+    // Check download limit for regular users
+    if (!isCreatorOrAdmin && !canDownload()) {
+      toast.error("You've reached your download limit for this plan. Upgrade to get more downloads!");
+      openSubModal("content");
+      return;
+    }
+
+    const url = movie.movieUrl || videoUrl;
+    if (!url) { toast.error("No download link available"); return; }
 
     // Only count downloads for subscribed regular users (not creators/admin, not admin-activated subs)
     if (!isCreatorOrAdmin) {
       try {
-        // Check if subscription was admin-activated (free sub = don't count)
         const isAdminSub = await isAdminActivatedSub(user.id);
         if (!isAdminSub) {
-          // This is a real paying subscriber - count the download
+          // Record download usage against their plan limit
+          const allowed = await recordDownloadUsage();
+          if (!allowed) {
+            toast.error("Download limit reached. Upgrade your plan!");
+            openSubModal("content");
+            return;
+          }
+
+          // Count the download
           incrementMovieDownloads(id!).catch(() => {});
           
           // Credit the VJ who owns this movie (250 UGX)
