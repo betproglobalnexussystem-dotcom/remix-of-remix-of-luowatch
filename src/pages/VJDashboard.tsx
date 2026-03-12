@@ -352,7 +352,41 @@ const VJDashboard = () => {
             </div>
           )}
 
-          {/* ====== FEATURED ====== */}
+          {/* ====== UPLOAD EPISODE ====== */}
+          {activeTab === "upload-episode" && (
+            <div>
+              <h2 className="text-foreground text-sm font-bold mb-4">Upload Episode</h2>
+              <p className="text-muted-foreground text-[10px] mb-3">Select a series and add an episode to it.</p>
+              <div className="bg-card border border-border rounded-lg p-4 max-w-lg">
+                {seriesMovies.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-muted-foreground text-xs mb-2">No series created yet.</p>
+                    <button onClick={() => setActiveTab("upload-series")} className="bg-primary text-primary-foreground px-4 py-1.5 rounded text-[10px] font-bold hover:bg-primary/90">Create a Series First</button>
+                  </div>
+                ) : (
+                  <form className="space-y-3" onSubmit={handleUploadEpisode}>
+                    <div>
+                      <label className="text-foreground text-[11px] font-semibold mb-1 block">Select Series *</label>
+                      <select className={inputCls} value={eMovieId} onChange={e => { setEMovieId(e.target.value); setESeriesTitle(seriesMovies.find(s => s.id === e.target.value)?.title || ""); }}>
+                        <option value="">Choose a series...</option>
+                        {seriesMovies.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Season *</label><input className={inputCls} placeholder="1" value={eSeason} onChange={e => setESeason(e.target.value)} /></div>
+                      <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Episode *</label><input className={inputCls} placeholder="1" value={eEpisode} onChange={e => setEEpisode(e.target.value)} /></div>
+                      <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Ep. Title</label><input className={inputCls} placeholder="Title" value={eEpisodeTitle} onChange={e => setEEpisodeTitle(e.target.value)} /></div>
+                    </div>
+                    <div><label className="text-foreground text-[10px] font-semibold mb-0.5 block">Episode Video Link *</label><input className={inputCls} placeholder="Paste video link (Google Drive, etc.)" value={eEpisodeUrl} onChange={e => setEEpisodeUrl(e.target.value)} /></div>
+                    <button type="submit" disabled={isUploading} className="bg-primary text-primary-foreground px-6 py-2 rounded text-xs font-bold hover:bg-primary/90 transition-colors flex items-center gap-1.5 disabled:opacity-50">
+                      {isUploading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><Plus className="w-3.5 h-3.5" /> Upload Episode</>}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === "featured" && (
             <div>
               <h2 className="text-foreground text-sm font-bold mb-4">Featured</h2>
