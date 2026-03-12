@@ -202,7 +202,7 @@ const MoviePlayerPage = () => {
             {/* Actions */}
             <div className="flex items-center gap-3 mb-3 text-[11px] text-muted-foreground">
               <button onClick={handleShare} className="flex items-center gap-1 hover:text-foreground"><Share2 className="w-3.5 h-3.5" /> Share</button>
-              <button onClick={handleDownload} className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded hover:bg-primary/90 transition-colors font-semibold"><Download className="w-3.5 h-3.5" /> Download</button>
+              <button onClick={handleDownload} className="flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1 rounded hover:bg-primary/90 transition-colors font-semibold"><Download className="w-3.5 h-3.5" /> Download{downloadsRemaining() >= 0 ? ` (${downloadsRemaining()} left)` : ""}</button>
             </div>
 
             {/* Title & Info */}
