@@ -1,13 +1,16 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useAuth } from "./AuthContext";
-import { doc, getDoc, setDoc, Timestamp, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, Timestamp, increment as fbIncrement } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { contentPlans } from "@/data/subscriptionPlans";
 
 interface Subscription {
   type: "content" | "games";
   planId: string;
   expiresAt: Date;
   active: boolean;
+  downloadLimit: number;
+  downloadsUsed: number;
 }
 
 interface SubscriptionContextType {
@@ -22,6 +25,9 @@ interface SubscriptionContextType {
   subModalType: "content" | "games";
   setSubModalType: (type: "content" | "games") => void;
   openSubModal: (type: "content" | "games") => void;
+  canDownload: () => boolean;
+  recordDownloadUsage: () => Promise<boolean>;
+  downloadsRemaining: () => number;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | null>(null);
@@ -33,7 +39,8 @@ export const useSubscription = () => {
       contentSub: null, gamesSub: null, hasContentAccess: false, hasGamesAccess: false,
       isLoading: true, refreshSubscription: async () => {}, showSubModal: false,
       setShowSubModal: () => {}, subModalType: "content" as const, setSubModalType: () => {},
-      openSubModal: () => {},
+      openSubModal: () => {}, canDownload: () => false, recordDownloadUsage: async () => false,
+      downloadsRemaining: () => 0,
     };
   }
   return ctx;
@@ -66,7 +73,6 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      // Check if user is a registered creator (VJ/Artist/TikToker)
       const profileDoc = await getDoc(doc(db, "profiles", user.id));
       if (profileDoc.exists()) {
         const role = profileDoc.data().role;
@@ -78,7 +84,10 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         const data = contentDoc.data();
         const expiresAt = data.expiresAt instanceof Timestamp ? data.expiresAt.toDate() : new Date(data.expiresAt);
         const active = expiresAt > new Date();
-        setContentSub({ type: "content", planId: data.planId, expiresAt, active });
+        const plan = contentPlans.find(p => p.id === data.planId);
+        const downloadLimit = plan?.downloadLimit ?? -1;
+        const downloadsUsed = data.downloadsUsed || 0;
+        setContentSub({ type: "content", planId: data.planId, expiresAt, active, downloadLimit, downloadsUsed });
       } else {
         setContentSub(null);
       }
@@ -88,7 +97,7 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
         const data = gamesDoc.data();
         const expiresAt = data.expiresAt instanceof Timestamp ? data.expiresAt.toDate() : new Date(data.expiresAt);
         const active = expiresAt > new Date();
-        setGamesSub({ type: "games", planId: data.planId, expiresAt, active });
+        setGamesSub({ type: "games", planId: data.planId, expiresAt, active, downloadLimit: -1, downloadsUsed: 0 });
       } else {
         setGamesSub(null);
       }
@@ -103,12 +112,42 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   }, [user]);
 
   const isAdmin = !!user && ADMIN_EMAILS.includes(user.email);
-  // Admin and registered creators (VJs, Artists, TikTokers) get free content access
   const hasContentAccess = isAdmin || isCreator || (contentSub?.active ?? false);
   const hasGamesAccess = isAdmin || (gamesSub?.active ?? false);
 
+  const canDownload = (): boolean => {
+    if (isAdmin || isCreator) return true;
+    if (!contentSub?.active) return false;
+    if (contentSub.downloadLimit === -1) return true; // unlimited
+    return contentSub.downloadsUsed < contentSub.downloadLimit;
+  };
+
+  const downloadsRemaining = (): number => {
+    if (isAdmin || isCreator) return -1; // unlimited
+    if (!contentSub?.active) return 0;
+    if (contentSub.downloadLimit === -1) return -1; // unlimited
+    return Math.max(0, contentSub.downloadLimit - contentSub.downloadsUsed);
+  };
+
+  const recordDownloadUsage = async (): Promise<boolean> => {
+    if (!user || !contentSub?.active) return false;
+    if (isAdmin || isCreator) return true; // don't track for internal
+    if (contentSub.downloadLimit !== -1 && contentSub.downloadsUsed >= contentSub.downloadLimit) return false;
+    
+    try {
+      await updateDoc(doc(db, "subscriptions", `${user.id}_content`), {
+        downloadsUsed: fbIncrement(1),
+      });
+      // Update local state
+      setContentSub(prev => prev ? { ...prev, downloadsUsed: prev.downloadsUsed + 1 } : null);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   return (
-    <SubscriptionContext.Provider value={{ contentSub, gamesSub, hasContentAccess, hasGamesAccess, isLoading, refreshSubscription: fetchSubscription, showSubModal, setShowSubModal, subModalType, setSubModalType, openSubModal }}>
+    <SubscriptionContext.Provider value={{ contentSub, gamesSub, hasContentAccess, hasGamesAccess, isLoading, refreshSubscription: fetchSubscription, showSubModal, setShowSubModal, subModalType, setSubModalType, openSubModal, canDownload, recordDownloadUsage, downloadsRemaining }}>
       {children}
     </SubscriptionContext.Provider>
   );
@@ -126,14 +165,16 @@ export async function activateSubscription(userId: string, type: "content" | "ga
     expiresAt: Timestamp.fromDate(expiresAt),
     transactionRef,
     activatedAt: Timestamp.now(),
+    downloadsUsed: 0,
   });
 
   // Log payment
+  const plan = contentPlans.find(p => p.id === planId);
   await setDoc(doc(db, "payments", transactionRef), {
     userId,
     type,
     planId,
-    amount: 0,
+    amount: plan?.price || 0,
     transactionRef,
     status: "completed",
     createdAt: Timestamp.now(),
