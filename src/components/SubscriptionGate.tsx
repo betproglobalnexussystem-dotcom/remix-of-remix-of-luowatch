@@ -65,7 +65,7 @@ const SubscriptionGate = ({ type, children }: Props) => {
           </p>
           <p className="text-muted-foreground text-[10px] mb-6">
             {type === "content"
-              ? "Plans start from UGX 3,500/day"
+              ? "Plans start from UGX 3,500/day (10 downloads)"
               : "Only UGX 1,000/day"}
           </p>
           <button

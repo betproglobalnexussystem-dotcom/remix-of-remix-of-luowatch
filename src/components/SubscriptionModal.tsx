@@ -126,15 +126,24 @@ const SubscriptionModal = () => {
               <div
                 key={plan.id}
                 className={`bg-background border rounded-xl p-3 text-center transition-all hover:border-primary/50 ${
-                  plan.id === "1week" ? "border-primary ring-1 ring-primary/30" : "border-border"
+                  plan.id === "1week" ? "border-primary ring-1 ring-primary/30" : plan.id === "1year" ? "border-accent ring-1 ring-accent/30" : "border-border"
                 }`}
               >
                 {plan.id === "3months" && (
                   <span className="bg-primary text-primary-foreground text-[8px] font-bold px-2 py-0.5 rounded-full mb-1 inline-block">BEST VALUE</span>
                 )}
+                {plan.id === "1year" && (
+                  <span className="bg-accent text-accent-foreground text-[8px] font-bold px-2 py-0.5 rounded-full mb-1 inline-block">UNLIMITED</span>
+                )}
                 <h3 className="text-foreground text-xs font-bold">{plan.name}</h3>
                 <div className="text-primary text-base font-bold">{plan.priceFormatted}</div>
-                <p className="text-muted-foreground text-[9px] mb-2">{plan.description}</p>
+                <p className="text-muted-foreground text-[9px] mb-1">{plan.description}</p>
+                {plan.downloadLimit > 0 && (
+                  <p className="text-primary text-[8px] font-bold mb-1">📥 {plan.downloadLimit} downloads</p>
+                )}
+                {plan.downloadLimit === -1 && plan.type === "content" && (
+                  <p className="text-accent text-[8px] font-bold mb-1">📥 Unlimited downloads</p>
+                )}
                 <button
                   onClick={() => handlePayment(plan)}
                   disabled={!!loading}
