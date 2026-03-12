@@ -109,12 +109,17 @@ export interface FireProfile {
 
 export async function saveProfileToFirestore(uid: string, data: Omit<FireProfile, "id">) {
   const ref = doc(db, "profiles", uid);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    await updateDoc(ref, { ...data });
-  } else {
-    const { setDoc } = await import("firebase/firestore");
-    await setDoc(ref, { ...data, createdAt: serverTimestamp() });
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      await updateDoc(ref, { ...data });
+    } else {
+      await setDoc(ref, { ...data, createdAt: serverTimestamp() });
+    }
+  } catch (err) {
+    // Retry once with setDoc on any error
+    console.error("saveProfile first attempt failed, retrying:", err);
+    await setDoc(doc(db, "profiles", uid), { ...data, createdAt: serverTimestamp() });
   }
 }
 
