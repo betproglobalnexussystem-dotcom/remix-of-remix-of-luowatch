@@ -18,7 +18,7 @@ const MoviePlayerPage = () => {
   const { episodes } = useEpisodes(id || "");
   const { movies: relatedMovies } = useMovies();
   const { user, setShowAuthModal, setAuthModalTab } = useAuth();
-  const { hasContentAccess, openSubModal } = useSubscription();
+  const { hasContentAccess, openSubModal, canDownload, recordDownloadUsage, downloadsRemaining } = useSubscription();
   const [activeEpisode, setActiveEpisode] = useState(0);
   const [selectedSeason, setSelectedSeason] = useState<string | "all">("all");
 
