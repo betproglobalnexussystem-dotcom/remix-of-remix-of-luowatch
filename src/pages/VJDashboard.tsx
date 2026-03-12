@@ -330,8 +330,8 @@ const VJDashboard = () => {
           {/* ====== UPLOAD SERIES ====== */}
           {activeTab === "upload-series" && (
             <div>
-              <h2 className="text-foreground text-sm font-bold mb-4">Upload Series</h2>
-              <p className="text-muted-foreground text-[10px] mb-3">Create a series first, then add episodes from "Manage Content".</p>
+              <h2 className="text-foreground text-sm font-bold mb-4">Create New Series</h2>
+              <p className="text-muted-foreground text-[10px] mb-3">Create a series first, then add episodes from "Upload Episode" tab.</p>
               <div className="bg-card border border-border rounded-lg p-4 max-w-lg">
                 <form className="space-y-3" onSubmit={handleUploadSeries}>
                   <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Series Title *</label><input className={inputCls} placeholder="Enter series title" value={sTitle} onChange={e => setSTitle(e.target.value)} /></div>
