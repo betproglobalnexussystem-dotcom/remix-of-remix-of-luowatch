@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   LayoutDashboard, Upload, Music, List, Wallet, ArrowDownToLine,
   Receipt, Download, ChevronLeft, Plus, Edit2, Check, X,
-  DollarSign, BarChart3, Play, Trash2, Loader2
+  DollarSign, BarChart3, Play, Trash2, Loader2, FileVideo, Image
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { useMusicianVideos } from "@/hooks/useFirestore";
 import { addMusicVideo, deleteMusicVideo, updateMusicVideo } from "@/lib/firestore";
 import { sendWithdrawal, formatPhone } from "@/lib/payments";
 import { subscribeCreatorEarning, getCreatorTransactions, recordWithdrawal, getOrCreateEarning, CreatorEarning, EarningTransaction } from "@/lib/earnings";
+import { uploadToR2, formatFileSize, R2UploadProgress } from "@/lib/r2Upload";
 
 const sidebarItems = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -28,8 +29,20 @@ const MusicianDashboard = () => {
   const { music: videos, loading } = useMusicianVideos(user?.id || "");
   const [activeTab, setActiveTab] = useState("overview");
 
-  const [vTitle, setVTitle] = useState(""); const [vArtist, setVArtist] = useState(""); const [vGenre, setVGenre] = useState("Afrobeat");
-  const [vYear, setVYear] = useState(""); const [vDuration, setVDuration] = useState(""); const [vThumbUrl, setVThumbUrl] = useState(""); const [vVideoUrl, setVVideoUrl] = useState("");
+  const [vTitle, setVTitle] = useState("");
+  const [vArtist, setVArtist] = useState("");
+  const [vGenre, setVGenre] = useState("Afrobeat");
+  const [vYear, setVYear] = useState("");
+  const [vDuration, setVDuration] = useState("");
+
+  // File uploads
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [thumbFile, setThumbFile] = useState<File | null>(null);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<R2UploadProgress | null>(null);
+  const [thumbUploadProgress, setThumbUploadProgress] = useState<R2UploadProgress | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
 
   // Edit
   const [editId, setEditId] = useState<string | null>(null);
@@ -64,20 +77,50 @@ const MusicianDashboard = () => {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vTitle || !vVideoUrl || !user) { toast.error("Title and video link required"); return; }
+    if (!vTitle) { toast.error("Song title is required"); return; }
+    if (!videoFile) { toast.error("Please select a music video file"); return; }
+    if (!user) return;
+
+    setIsUploading(true);
     try {
+      // Upload video file
+      toast.info("Uploading video file...");
+      const videoUrl = await uploadToR2(videoFile, setVideoUploadProgress);
+
+      // Upload thumbnail if provided
+      let thumbnailUrl = "";
+      if (thumbFile) {
+        toast.info("Uploading thumbnail...");
+        thumbnailUrl = await uploadToR2(thumbFile, setThumbUploadProgress);
+      }
+
       await addMusicVideo({
-        title: vTitle, artist: vArtist || `${user.firstName} ${user.lastName}`.trim(), genre: vGenre,
-        year: vYear, duration: vDuration, thumbnailUrl: vThumbUrl, videoUrl: vVideoUrl,
-        musicianId: user.id, musicianName: `${user.firstName} ${user.lastName}`.trim() || user.email, verified: true,
+        title: vTitle,
+        artist: vArtist || `${user.firstName} ${user.lastName}`.trim(),
+        genre: vGenre,
+        year: vYear,
+        duration: vDuration,
+        thumbnailUrl,
+        videoUrl,
+        musicianId: user.id,
+        musicianName: `${user.firstName} ${user.lastName}`.trim() || user.email,
+        verified: true,
       });
-      setVTitle(""); setVArtist(""); setVYear(""); setVDuration(""); setVThumbUrl(""); setVVideoUrl("");
-      toast.success("Music video uploaded!");
-    } catch { toast.error("Upload failed"); }
+
+      setVTitle(""); setVArtist(""); setVYear(""); setVDuration("");
+      setVideoFile(null); setThumbFile(null);
+      setVideoUploadProgress(null); setThumbUploadProgress(null);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      if (thumbInputRef.current) thumbInputRef.current.value = "";
+      toast.success("Music video uploaded successfully!");
+    } catch (err: any) {
+      toast.error("Upload failed: " + (err.message || "Unknown error"));
+    }
+    setIsUploading(false);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete?")) return;
+    if (!confirm("Delete this video?")) return;
     try { await deleteMusicVideo(id); toast.success("Deleted"); } catch { toast.error("Failed"); }
   };
 
@@ -188,16 +231,142 @@ const MusicianDashboard = () => {
               <h2 className="text-foreground text-sm font-bold mb-4">Upload Music Video</h2>
               <div className="bg-card border border-border rounded-lg p-4 max-w-lg">
                 <form className="space-y-3" onSubmit={handleUpload}>
-                  <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Song Title *</label><input className={inputCls} placeholder="Enter song title" value={vTitle} onChange={e => setVTitle(e.target.value)} /></div>
-                  <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Artist Name</label><input className={inputCls} placeholder="Artist name" value={vArtist} onChange={e => setVArtist(e.target.value)} /></div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Genre</label><select className={inputCls} value={vGenre} onChange={e => setVGenre(e.target.value)}><option>Afrobeat</option><option>Hip Hop</option><option>Gospel</option><option>Dancehall</option><option>RnB</option><option>Traditional</option></select></div>
-                    <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Year</label><input className={inputCls} placeholder="2026" value={vYear} onChange={e => setVYear(e.target.value)} /></div>
-                    <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Duration</label><input className={inputCls} placeholder="3:45" value={vDuration} onChange={e => setVDuration(e.target.value)} /></div>
+                  <div>
+                    <label className="text-foreground text-[11px] font-semibold mb-1 block">Song Title *</label>
+                    <input className={inputCls} placeholder="Enter song title" value={vTitle} onChange={e => setVTitle(e.target.value)} />
                   </div>
-                  <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Thumbnail URL</label><input className={inputCls} placeholder="https://..." value={vThumbUrl} onChange={e => setVThumbUrl(e.target.value)} /></div>
-                  <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Music Video Link *</label><input className={inputCls} placeholder="https://..." value={vVideoUrl} onChange={e => setVVideoUrl(e.target.value)} /></div>
-                  <button type="submit" className="bg-primary text-primary-foreground px-6 py-2 rounded text-xs font-bold hover:bg-primary/90 transition-colors flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Upload Video</button>
+                  <div>
+                    <label className="text-foreground text-[11px] font-semibold mb-1 block">Artist Name</label>
+                    <input className={inputCls} placeholder="Artist name" value={vArtist} onChange={e => setVArtist(e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-foreground text-[11px] font-semibold mb-1 block">Genre</label>
+                      <select className={inputCls} value={vGenre} onChange={e => setVGenre(e.target.value)}>
+                        <option>Afrobeat</option><option>Hip Hop</option><option>Gospel</option><option>Dancehall</option><option>RnB</option><option>Traditional</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-foreground text-[11px] font-semibold mb-1 block">Year</label>
+                      <input className={inputCls} placeholder="2026" value={vYear} onChange={e => setVYear(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-foreground text-[11px] font-semibold mb-1 block">Duration</label>
+                      <input className={inputCls} placeholder="3:45" value={vDuration} onChange={e => setVDuration(e.target.value)} />
+                    </div>
+                  </div>
+
+                  {/* Music Video File Upload */}
+                  <div>
+                    <label className="text-foreground text-[11px] font-semibold mb-1 block">Music Video File * (max 200MB)</label>
+                    <div
+                      className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => videoInputRef.current?.click()}
+                    >
+                      <input
+                        ref={videoInputRef}
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            if (f.size > 200 * 1024 * 1024) {
+                              toast.error("Video file must be under 200MB");
+                              return;
+                            }
+                            setVideoFile(f);
+                          }
+                        }}
+                      />
+                      {videoFile ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <FileVideo className="w-5 h-5 text-primary" />
+                          <div className="text-left">
+                            <p className="text-foreground text-xs font-semibold truncate max-w-[200px]">{videoFile.name}</p>
+                            <p className="text-muted-foreground text-[10px]">{formatFileSize(videoFile.size)}</p>
+                          </div>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setVideoFile(null); if (videoInputRef.current) videoInputRef.current.value = ""; }} className="text-muted-foreground hover:text-destructive">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <FileVideo className="w-8 h-8 mx-auto text-muted-foreground mb-1" />
+                          <p className="text-muted-foreground text-[11px]">Click to select video file</p>
+                          <p className="text-muted-foreground text-[9px]">MP4, MOV, AVI, MKV • Max 200MB</p>
+                        </div>
+                      )}
+                    </div>
+                    {videoUploadProgress && isUploading && (
+                      <div className="mt-2">
+                        <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
+                          <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${videoUploadProgress.percent}%` }} />
+                        </div>
+                        <p className="text-[9px] text-muted-foreground mt-0.5">Video: {videoUploadProgress.percent}% • {formatFileSize(videoUploadProgress.loaded)} / {formatFileSize(videoUploadProgress.total)}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Thumbnail File Upload */}
+                  <div>
+                    <label className="text-foreground text-[11px] font-semibold mb-1 block">Thumbnail Image (optional)</label>
+                    <div
+                      className="border-2 border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => thumbInputRef.current?.click()}
+                    >
+                      <input
+                        ref={thumbInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            if (f.size > 10 * 1024 * 1024) {
+                              toast.error("Thumbnail must be under 10MB");
+                              return;
+                            }
+                            setThumbFile(f);
+                          }
+                        }}
+                      />
+                      {thumbFile ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <Image className="w-5 h-5 text-primary" />
+                          <div className="text-left">
+                            <p className="text-foreground text-xs font-semibold truncate max-w-[200px]">{thumbFile.name}</p>
+                            <p className="text-muted-foreground text-[10px]">{formatFileSize(thumbFile.size)}</p>
+                          </div>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setThumbFile(null); if (thumbInputRef.current) thumbInputRef.current.value = ""; }} className="text-muted-foreground hover:text-destructive">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <Image className="w-6 h-6 mx-auto text-muted-foreground mb-1" />
+                          <p className="text-muted-foreground text-[10px]">Click to select thumbnail</p>
+                          <p className="text-muted-foreground text-[9px]">JPG, PNG, WebP</p>
+                        </div>
+                      )}
+                    </div>
+                    {thumbUploadProgress && isUploading && (
+                      <div className="mt-2">
+                        <div className="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
+                          <div className="bg-accent h-1.5 rounded-full transition-all" style={{ width: `${thumbUploadProgress.percent}%` }} />
+                        </div>
+                        <p className="text-[9px] text-muted-foreground mt-0.5">Thumbnail: {thumbUploadProgress.percent}%</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isUploading}
+                    className="bg-primary text-primary-foreground px-6 py-2 rounded text-xs font-bold hover:bg-primary/90 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isUploading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><Plus className="w-3.5 h-3.5" /> Upload Video</>}
+                  </button>
                 </form>
               </div>
             </div>
@@ -217,8 +386,6 @@ const MusicianDashboard = () => {
                         <div className="flex-1 space-y-1">
                           <input className={inputCls} value={editData.title || ""} onChange={e => setEditData({ ...editData, title: e.target.value })} placeholder="Title" />
                           <input className={inputCls} value={editData.artist || ""} onChange={e => setEditData({ ...editData, artist: e.target.value })} placeholder="Artist" />
-                          <input className={inputCls} value={editData.videoUrl || ""} onChange={e => setEditData({ ...editData, videoUrl: e.target.value })} placeholder="Video URL" />
-                          <input className={inputCls} value={editData.thumbnailUrl || ""} onChange={e => setEditData({ ...editData, thumbnailUrl: e.target.value })} placeholder="Thumbnail URL" />
                           <div className="flex gap-1">
                             <button onClick={() => handleSaveEdit(v.id)} className="text-[9px] bg-primary text-primary-foreground px-2 py-0.5 rounded flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> Save</button>
                             <button onClick={() => setEditId(null)} className="text-[9px] bg-secondary text-foreground px-2 py-0.5 rounded"><X className="w-2.5 h-2.5" /></button>
@@ -231,7 +398,7 @@ const MusicianDashboard = () => {
                             <p className="text-muted-foreground text-[9px]">{v.artist} • {v.genre} • {v.plays} plays</p>
                           </div>
                           <div className="flex gap-1">
-                            <button onClick={() => { setEditId(v.id); setEditData({ title: v.title, artist: v.artist, genre: v.genre, videoUrl: v.videoUrl, thumbnailUrl: v.thumbnailUrl }); }} className="text-[9px] bg-secondary text-foreground px-1.5 py-0.5 rounded flex items-center gap-0.5"><Edit2 className="w-2.5 h-2.5" /> Edit</button>
+                            <button onClick={() => { setEditId(v.id); setEditData({ title: v.title, artist: v.artist, genre: v.genre }); }} className="text-[9px] bg-secondary text-foreground px-1.5 py-0.5 rounded flex items-center gap-0.5"><Edit2 className="w-2.5 h-2.5" /> Edit</button>
                             <button onClick={() => handleDelete(v.id)} className="text-[9px] bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded flex items-center gap-0.5"><Trash2 className="w-2.5 h-2.5" /> Delete</button>
                           </div>
                         </>
@@ -265,40 +432,24 @@ const MusicianDashboard = () => {
                 </form>
               </div>
 
-              <h3 className="text-foreground text-xs font-bold mb-2">Recent Transactions</h3>
-              <div className="bg-card border border-border rounded-lg p-3 mb-4">
+              <div className="bg-card border border-border rounded-lg p-4 mb-4">
+                <h3 className="text-foreground text-xs font-bold mb-2">Transaction History</h3>
                 {transactions.length === 0 ? <p className="text-muted-foreground text-[10px]">No transactions yet.</p> : (
-                  <div className="overflow-x-auto max-h-64">
-                    <table className="w-full text-[10px]">
-                      <thead><tr className="border-b border-border">
-                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Type</th>
-                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Amount</th>
-                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Details</th>
-                        <th className="text-left p-1.5 text-muted-foreground font-semibold">Date</th>
-                      </tr></thead>
-                      <tbody>
-                        {transactions.slice(0, 20).map((tx) => (
-                          <tr key={tx.id} className="border-b border-border last:border-0">
-                            <td className="p-1.5"><span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", tx.type === "milestone_bonus" ? "bg-primary/20 text-primary" : tx.type === "withdrawal" ? "bg-yellow-500/20 text-yellow-400" : "bg-green-500/20 text-green-400")}>{tx.type === "milestone_bonus" ? "Bonus" : tx.type === "withdrawal" ? "Withdraw" : "Download"}</span></td>
-                            <td className="p-1.5 text-foreground font-bold">{tx.type === "withdrawal" ? `-${formatUGX(tx.amount)}` : tx.amount > 0 ? `+${formatUGX(tx.amount)}` : "—"}</td>
-                            <td className="p-1.5 text-muted-foreground truncate max-w-[150px]">{tx.contentTitle || tx.phone || "—"}</td>
-                            <td className="p-1.5 text-muted-foreground">{tx.createdAt?.toDate ? tx.createdAt.toDate().toLocaleDateString() : "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <table className="w-full text-[10px]">
+                    <thead><tr className="border-b border-border"><th className="text-left p-1.5 text-muted-foreground font-semibold">Type</th><th className="text-left p-1.5 text-muted-foreground font-semibold">Amount</th><th className="text-left p-1.5 text-muted-foreground font-semibold">Status</th><th className="text-left p-1.5 text-muted-foreground font-semibold">Date</th></tr></thead>
+                    <tbody>{transactions.map(t => (<tr key={t.id} className="border-b border-border last:border-0"><td className="p-1.5 text-foreground capitalize">{t.type}</td><td className="p-1.5 text-foreground">{formatUGX(t.amount)}</td><td className="p-1.5"><span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold", t.status === "completed" ? "bg-badge-new text-primary-foreground" : "bg-secondary text-muted-foreground")}>{t.status}</span></td><td className="p-1.5 text-muted-foreground">{t.createdAt?.toDate?.()?.toLocaleDateString() || "—"}</td></tr>))}</tbody>
+                  </table>
                 )}
               </div>
 
-              <div className="bg-card border border-border rounded-lg p-3">
-                <h4 className="text-foreground text-[11px] font-bold mb-2">Earning Rules</h4>
-                <ul className="text-[10px] text-muted-foreground space-y-1">
-                  <li>• Reach <span className="text-primary font-bold">{MONTHLY_THRESHOLD.toLocaleString()} confirmed downloads</span> in a month = <span className="text-primary font-bold">{formatUGX(MONTHLY_PAYOUT)}</span></li>
-                  <li>• Only downloads by paying subscribers count (VJ/admin/artist downloads excluded)</li>
-                  <li>• Monthly counter resets at the start of each month</li>
-                  <li>• Withdrawals available every Saturday 12 PM – Midnight</li>
-                  <li>• Cannot withdraw more than your balance</li>
+              <div className="bg-card border border-border rounded-lg p-4">
+                <h3 className="text-foreground text-xs font-bold mb-2">💰 How Earnings Work</h3>
+                <ul className="text-[10px] text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Reach <span className="text-primary font-bold">{MONTHLY_THRESHOLD.toLocaleString()}</span> confirmed downloads in a month</li>
+                  <li>Earn <span className="text-primary font-bold">{formatUGX(MONTHLY_PAYOUT)}</span> milestone bonus</li>
+                  <li>Only downloads by subscribed users count</li>
+                  <li>Downloads by VJs, musicians, admins, and tiktokers don't count</li>
+                  <li>Withdrawals available every Saturday 12PM - Midnight</li>
                 </ul>
               </div>
             </div>
