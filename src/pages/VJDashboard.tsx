@@ -18,6 +18,7 @@ const sidebarItems = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "upload-movie", label: "Upload Movies", icon: Upload },
   { id: "upload-series", label: "Upload Series", icon: Tv },
+  { id: "upload-episode", label: "Upload Episode", icon: Film },
   { id: "featured", label: "Featured", icon: TrendingUp },
   { id: "manage-content", label: "Manage Content", icon: List },
   { id: "wallet", label: "Wallet", icon: Wallet },
