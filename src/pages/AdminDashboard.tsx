@@ -218,9 +218,13 @@ const UploadTab = () => {
   const [eSeriesId, setESeriesId] = useState(""); const [eSeason, setESeason] = useState(""); const [eEp, setEEp] = useState("");
   const [eTitle, setETitle] = useState(""); const [eUrl, setEUrl] = useState("");
 
-  // Music
+  // Music - with R2 file upload
   const [muTitle, setMuTitle] = useState(""); const [muArtist, setMuArtist] = useState(""); const [muGenre, setMuGenre] = useState("Afrobeat");
-  const [muYear, setMuYear] = useState(""); const [muDur, setMuDur] = useState(""); const [muThumb, setMuThumb] = useState(""); const [muUrl, setMuUrl] = useState("");
+  const [muYear, setMuYear] = useState(""); const [muDur, setMuDur] = useState("");
+  const [muVideoFile, setMuVideoFile] = useState<File | null>(null);
+  const [muThumbFile, setMuThumbFile] = useState<File | null>(null);
+  const [muUploadProgress, setMuUploadProgress] = useState(0);
+  const [muThumbProgress, setMuThumbProgress] = useState(0);
 
   // TikTok
   const [ttTitle, setTtTitle] = useState(""); const [ttDesc, setTtDesc] = useState(""); const [ttUrl, setTtUrl] = useState("");
@@ -245,7 +249,8 @@ const UploadTab = () => {
         toast.success(`${uploadType === "series" ? "Series" : "Movie"} uploaded!`);
         setMTitle(""); setMYear(""); setMGenre(""); setMDesc(""); setMPoster(""); setMUrl(""); setMVjName("");
       } else if (uploadType === "episode") {
-        if (!eSeriesId || !eUrl) throw new Error("Series and URL required");
+        if (!eSeriesId) throw new Error("Please select a series");
+        if (!eUrl) throw new Error("Episode URL required");
         const series = seriesList.find(s => s.id === eSeriesId);
         await addEpisode({
           movieId: eSeriesId,
@@ -259,10 +264,26 @@ const UploadTab = () => {
         toast.success("Episode uploaded!");
         setESeriesId(""); setESeason(""); setEEp(""); setETitle(""); setEUrl("");
       } else if (uploadType === "music") {
-        if (!muTitle || !muUrl) throw new Error("Title and URL required");
-        await addMusicVideo({ title: muTitle, artist: muArtist, genre: muGenre, year: muYear, duration: muDur, thumbnailUrl: muThumb, videoUrl: muUrl, musicianId: "admin", musicianName: muArtist || "Admin", verified: true });
+        if (!muTitle) throw new Error("Title required");
+        if (!muVideoFile) throw new Error("Please select a music video file");
+        
+        // Upload video to R2
+        const { uploadToR2 } = await import("@/lib/r2Upload");
+        toast.info("Uploading music video...");
+        setMuUploadProgress(0);
+        const videoUrl = await uploadToR2(muVideoFile, (p) => setMuUploadProgress(p.percent));
+        
+        // Upload thumbnail if provided
+        let thumbnailUrl = "";
+        if (muThumbFile) {
+          toast.info("Uploading thumbnail...");
+          setMuThumbProgress(0);
+          thumbnailUrl = await uploadToR2(muThumbFile, (p) => setMuThumbProgress(p.percent));
+        }
+        
+        await addMusicVideo({ title: muTitle, artist: muArtist, genre: muGenre, year: muYear, duration: muDur, thumbnailUrl, videoUrl, musicianId: "admin", musicianName: muArtist || "Admin", verified: true });
         toast.success("Music video uploaded!");
-        setMuTitle(""); setMuArtist(""); setMuYear(""); setMuDur(""); setMuThumb(""); setMuUrl("");
+        setMuTitle(""); setMuArtist(""); setMuYear(""); setMuDur(""); setMuVideoFile(null); setMuThumbFile(null); setMuUploadProgress(0); setMuThumbProgress(0);
       } else if (uploadType === "tiktok") {
         if (!ttUrl) throw new Error("Video URL required");
         await addTikTokVideo({ title: ttTitle, description: ttDesc, videoUrl: ttUrl, thumbnailUrl: ttThumb, music: ttMusic, tiktokerId: "admin", tiktokerName: ttCreator || "Admin", tiktokerAvatar: ttAvatar, verified: true });
@@ -312,6 +333,7 @@ const UploadTab = () => {
                 <option value="">Select series</option>
                 {seriesList.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
               </select>
+              {seriesList.length === 0 && <p className="text-muted-foreground text-[9px] mt-1">No series found. Create a series first.</p>}
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Season</label><input className={inputCls} value={eSeason} onChange={e => setESeason(e.target.value)} placeholder="1" /></div>
@@ -328,8 +350,34 @@ const UploadTab = () => {
               <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Year</label><input className={inputCls} value={muYear} onChange={e => setMuYear(e.target.value)} /></div>
               <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Duration</label><input className={inputCls} value={muDur} onChange={e => setMuDur(e.target.value)} placeholder="3:45" /></div>
             </div>
-            <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Thumbnail URL</label><input className={inputCls} value={muThumb} onChange={e => setMuThumb(e.target.value)} /></div>
-            <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Video URL *</label><input className={inputCls} value={muUrl} onChange={e => setMuUrl(e.target.value)} /></div>
+            <div>
+              <label className="text-foreground text-[11px] font-semibold mb-1 block">Music Video File * (max 200MB)</label>
+              <input type="file" accept="video/*" onChange={e => setMuVideoFile(e.target.files?.[0] || null)}
+                className="w-full bg-secondary text-foreground text-[10px] px-3 py-2 rounded border border-border file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-primary file:text-primary-foreground file:cursor-pointer" />
+              {muVideoFile && <p className="text-muted-foreground text-[9px] mt-1">Selected: {muVideoFile.name} ({(muVideoFile.size / (1024*1024)).toFixed(1)} MB)</p>}
+              {loading && muUploadProgress > 0 && muUploadProgress < 100 && (
+                <div className="mt-1.5">
+                  <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${muUploadProgress}%` }} />
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">Uploading video... {muUploadProgress}%</p>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-foreground text-[11px] font-semibold mb-1 block">Thumbnail Image (optional)</label>
+              <input type="file" accept="image/*" onChange={e => setMuThumbFile(e.target.files?.[0] || null)}
+                className="w-full bg-secondary text-foreground text-[10px] px-3 py-2 rounded border border-border file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-primary file:text-primary-foreground file:cursor-pointer" />
+              {muThumbFile && <p className="text-muted-foreground text-[9px] mt-1">Selected: {muThumbFile.name}</p>}
+              {loading && muThumbProgress > 0 && muThumbProgress < 100 && (
+                <div className="mt-1.5">
+                  <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${muThumbProgress}%` }} />
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">Uploading thumbnail... {muThumbProgress}%</p>
+                </div>
+              )}
+            </div>
           </>}
           {uploadType === "tiktok" && <>
             <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Title</label><input className={inputCls} value={ttTitle} onChange={e => setTtTitle(e.target.value)} /></div>
@@ -349,7 +397,7 @@ const UploadTab = () => {
             <div><label className="text-foreground text-[11px] font-semibold mb-1 block">Description</label><input className={inputCls} value={chDesc} onChange={e => setChDesc(e.target.value)} /></div>
           </>}
           <button type="submit" disabled={loading} className="bg-primary text-primary-foreground px-6 py-2 rounded text-xs font-bold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5">
-            {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><Plus className="w-3.5 h-3.5" /> Upload</>}
+            {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {uploadType === "music" ? `Uploading... ${muUploadProgress}%` : "Uploading..."}</> : <><Plus className="w-3.5 h-3.5" /> Upload</>}
           </button>
         </form>
       </div>
