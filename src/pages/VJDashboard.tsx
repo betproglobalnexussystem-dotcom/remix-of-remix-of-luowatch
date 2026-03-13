@@ -150,20 +150,30 @@ const VJDashboard = () => {
     e.preventDefault();
     const seriesId = showAddEpisode ? managingSeriesId : eMovieId;
     const seriesTitle = showAddEpisode ? (seriesMovies.find(s => s.id === seriesId)?.title || "") : eSeriesTitle;
-    if (!seriesId) { toast.error("Series required"); return; }
-    if (!eEpisodeUrl) { toast.error("Episode link is required"); return; }
-    if (!user) return;
+    if (!seriesId) { toast.error("Please select a series first"); return; }
+    if (!eEpisodeUrl || !eEpisodeUrl.trim()) { toast.error("Episode link is required"); return; }
+    if (!user) { toast.error("You must be logged in"); return; }
     setIsUploading(true);
     try {
-      await addEpisode({
-        movieId: seriesId, seriesTitle, season: eSeason,
-        episode: eEpisode, episodeTitle: eEpisodeTitle, episodeUrl: eEpisodeUrl, vjId: user.id,
-      });
+      const episodeData = {
+        movieId: seriesId,
+        seriesTitle: seriesTitle || "",
+        season: (eSeason || "").trim() || "1",
+        episode: (eEpisode || "").trim() || "1",
+        episodeTitle: (eEpisodeTitle || "").trim() || `Episode ${(eEpisode || "").trim() || "1"}`,
+        episodeUrl: eEpisodeUrl.trim(),
+        vjId: user.id,
+      };
+      console.log("Uploading episode:", episodeData);
+      await addEpisode(episodeData);
       setESeason(""); setEEpisode(""); setEEpisodeTitle(""); setEEpisodeUrl(""); setEMovieId(""); setESeriesTitle("");
       setShowAddEpisode(false);
       await refreshEpisodes();
-      toast.success("Episode uploaded!");
-    } catch (err: any) { toast.error("Upload failed: " + (err.message || "Unknown error")); }
+      toast.success("Episode uploaded successfully!");
+    } catch (err: any) {
+      console.error("Episode upload error:", err);
+      toast.error("Upload failed: " + (err.message || "Unknown error"));
+    }
     setIsUploading(false);
   };
 
