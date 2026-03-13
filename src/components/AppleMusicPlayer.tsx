@@ -205,78 +205,80 @@ const AppleMusicPlayer = ({ src, poster, title, artist }: AppleMusicPlayerProps)
         data-controls
         className={`absolute bottom-0 left-0 right-0 z-20 transition-all duration-500 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"}`}
       >
-        <div className="mx-3 mb-3 rounded-2xl overflow-hidden"
-          style={{ background: "rgba(30,30,40,0.65)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", boxShadow: "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }}>
+        <div
+          className="mx-2 mb-2 rounded-xl overflow-hidden md:mx-3 md:mb-2 md:rounded-2xl"
+          style={{ background: "rgba(30,30,40,0.65)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", boxShadow: "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }}
+        >
           
           {/* Progress bar */}
-          <div className="px-4 pt-3">
+          <div className="px-3 pt-2 md:px-3 md:pt-2.5">
             <div
               ref={progressRef}
-              className="relative h-6 cursor-pointer flex items-center group/prog"
+              className="relative h-4 cursor-pointer flex items-center group/prog md:h-5"
               onClick={handleProgressClick}
               onMouseDown={(e) => { const onMove = (ev: MouseEvent) => { const rect = progressRef.current?.getBoundingClientRect(); if (rect && duration) { const r = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width)); seek(r * duration); } }; const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); }; window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp); }}
             >
-              <div className="w-full h-1 group-hover/prog:h-1.5 rounded-full transition-all" style={{ background: "rgba(255,255,255,0.12)" }}>
-                <div className="absolute top-1/2 -translate-y-1/2 left-0 h-1 group-hover/prog:h-1.5 rounded-full transition-all" style={{ width: `${bufferedPct}%`, background: "rgba(255,255,255,0.18)" }} />
-                <div className="absolute top-1/2 -translate-y-1/2 left-0 h-1 group-hover/prog:h-1.5 rounded-full transition-all" style={{ width: `${progress}%`, background: "linear-gradient(90deg, #fa2d6a, #a855f7)" }}>
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full opacity-0 group-hover/prog:opacity-100 transition-opacity"
+              <div className="w-full h-0.5 group-hover/prog:h-1 rounded-full transition-all" style={{ background: "rgba(255,255,255,0.12)" }}>
+                <div className="absolute top-1/2 -translate-y-1/2 left-0 h-0.5 group-hover/prog:h-1 rounded-full transition-all" style={{ width: `${bufferedPct}%`, background: "rgba(255,255,255,0.18)" }} />
+                <div className="absolute top-1/2 -translate-y-1/2 left-0 h-0.5 group-hover/prog:h-1 rounded-full transition-all" style={{ width: `${progress}%`, background: "linear-gradient(90deg, #fa2d6a, #a855f7)" }}>
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full opacity-0 group-hover/prog:opacity-100 transition-opacity"
                     style={{ background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }} />
                 </div>
               </div>
             </div>
-            <div className="flex justify-between -mt-1 mb-1">
-              <span className="text-[10px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>{formatTime(currentTime)}</span>
-              <span className="text-[10px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>{formatTime(duration)}</span>
+            <div className="flex justify-between -mt-0.5 mb-0.5">
+              <span className="text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>{formatTime(currentTime)}</span>
+              <span className="text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>{formatTime(duration)}</span>
             </div>
           </div>
 
           {/* Buttons */}
-          <div className="flex items-center justify-between px-4 pb-3">
+          <div className="flex items-center justify-between px-3 pb-2 md:px-3 md:pb-2.5">
             <div className="flex items-center gap-1">
               <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }}
-                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
                 style={{ color: "rgba(255,255,255,0.7)" }}>
-                {muted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Volume2 className="w-3.5 h-3.5 md:w-4 md:h-4" />}
               </button>
               <input
                 type="range" min="0" max="1" step="0.05"
                 value={muted ? 0 : volume}
                 onChange={(e) => { setVolume(parseFloat(e.target.value)); setMuted(false); }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-16 h-1 cursor-pointer accent-white/80"
+                className="w-12 h-1 cursor-pointer accent-white/80 md:w-14"
               />
             </div>
 
             {/* Center controls */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-2.5">
               <button onClick={(e) => { e.stopPropagation(); skip(-10); }}
-                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
                 style={{ color: "rgba(255,255,255,0.8)" }}>
-                <SkipBack className="w-5 h-5" />
+                <SkipBack className="w-4 h-4 md:w-[18px] md:h-[18px]" />
               </button>
               <button onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                className="p-3 rounded-full transition-all hover:scale-105"
+                className="p-2 rounded-full transition-all hover:scale-105 md:p-2.5"
                 style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.95)" }}>
-                {playing ? <Pause className="w-6 h-6" fill="currentColor" /> : <Play className="w-6 h-6 ml-0.5" fill="currentColor" />}
+                {playing ? <Pause className="w-5 h-5" fill="currentColor" /> : <Play className="w-5 h-5 ml-0.5" fill="currentColor" />}
               </button>
               <button onClick={(e) => { e.stopPropagation(); skip(10); }}
-                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
                 style={{ color: "rgba(255,255,255,0.8)" }}>
-                <SkipForward className="w-5 h-5" />
+                <SkipForward className="w-4 h-4 md:w-[18px] md:h-[18px]" />
               </button>
             </div>
 
             {/* Right controls */}
             <div className="flex items-center gap-1">
               <button onClick={(e) => { e.stopPropagation(); togglePiP(); }}
-                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
                 style={{ color: "rgba(255,255,255,0.7)" }}>
-                <PictureInPicture2 className="w-4 h-4" />
+                <PictureInPicture2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
               </button>
               <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
-                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
                 style={{ color: "rgba(255,255,255,0.7)" }}>
-                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+                {isFullscreen ? <Minimize className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Maximize className="w-3.5 h-3.5 md:w-4 md:h-4" />}
               </button>
             </div>
           </div>

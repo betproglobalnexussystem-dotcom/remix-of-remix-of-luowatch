@@ -204,6 +204,7 @@ const AddCreatorTab = () => {
 // ========== UPLOAD TAB ==========
 const UploadTab = () => {
   const [uploadType, setUploadType] = useState<"movie" | "series" | "episode" | "music" | "tiktok" | "channel">("movie");
+  const { user } = useAuth();
   const { movies } = useMovies();
   const seriesList = movies.filter(m => m.type === "series");
   const [loading, setLoading] = useState(false);
@@ -239,16 +240,24 @@ const UploadTab = () => {
         await addMovie({
           title: mTitle, year: mYear, quality: "1080p", genre: mGenre, description: mDesc,
           posterUrl: mPoster, movieUrl: mUrl, downloadUrl: "", featured: false,
-          type: uploadType, vjId: "admin", vjName: mVjName || "Admin",
+          type: uploadType, vjId: user?.id || "admin", vjName: mVjName || "Admin",
         });
         toast.success(`${uploadType === "series" ? "Series" : "Movie"} uploaded!`);
         setMTitle(""); setMYear(""); setMGenre(""); setMDesc(""); setMPoster(""); setMUrl(""); setMVjName("");
       } else if (uploadType === "episode") {
         if (!eSeriesId || !eUrl) throw new Error("Series and URL required");
         const series = seriesList.find(s => s.id === eSeriesId);
-        await addEpisode({ movieId: eSeriesId, seriesTitle: series?.title || "", season: eSeason, episode: eEp, episodeTitle: eTitle, episodeUrl: eUrl, vjId: "admin" });
+        await addEpisode({
+          movieId: eSeriesId,
+          seriesTitle: series?.title || "",
+          season: eSeason.trim() || "1",
+          episode: eEp.trim() || "1",
+          episodeTitle: eTitle.trim() || `Episode ${eEp.trim() || "1"}`,
+          episodeUrl: eUrl,
+          vjId: user?.id || "admin",
+        });
         toast.success("Episode uploaded!");
-        setESeason(""); setEEp(""); setETitle(""); setEUrl("");
+        setESeriesId(""); setESeason(""); setEEp(""); setETitle(""); setEUrl("");
       } else if (uploadType === "music") {
         if (!muTitle || !muUrl) throw new Error("Title and URL required");
         await addMusicVideo({ title: muTitle, artist: muArtist, genre: muGenre, year: muYear, duration: muDur, thumbnailUrl: muThumb, videoUrl: muUrl, musicianId: "admin", musicianName: muArtist || "Admin", verified: true });
@@ -261,7 +270,7 @@ const UploadTab = () => {
         setTtTitle(""); setTtDesc(""); setTtUrl(""); setTtThumb(""); setTtMusic(""); setTtCreator(""); setTtAvatar("");
       } else if (uploadType === "channel") {
         if (!chName || !chStream) throw new Error("Name and stream URL required");
-        await addChannel({ name: chName, logoUrl: chLogo, streamUrl: chStream, isLive: true, description: chDesc, vjId: "admin" });
+        await addChannel({ name: chName, logoUrl: chLogo, streamUrl: chStream, isLive: true, description: chDesc, vjId: user?.id || "admin" });
         toast.success("Channel added!");
         setChName(""); setChLogo(""); setChStream(""); setChDesc("");
       }
