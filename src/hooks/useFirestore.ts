@@ -47,8 +47,16 @@ export function useVJMovies(vjId: string) {
   useEffect(() => {
     if (!vjId) return;
     const unsub = subscribeMovies(
-      [where("vjId", "==", vjId), orderBy("createdAt", "desc")],
-      (data) => { setMovies(data); setLoading(false); }
+      [where("vjId", "==", vjId)],
+      (data) => {
+        const sorted = [...data].sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? 0;
+          const bTime = b.createdAt?.toMillis?.() ?? 0;
+          return bTime - aTime;
+        });
+        setMovies(sorted);
+        setLoading(false);
+      }
     );
     return unsub;
   }, [vjId]);
@@ -102,8 +110,16 @@ export function useMusicianVideos(musicianId: string) {
   useEffect(() => {
     if (!musicianId) return;
     const unsub = subscribeMusic(
-      [where("musicianId", "==", musicianId), orderBy("createdAt", "desc")],
-      (data) => { setMusic(data); setLoading(false); }
+      [where("musicianId", "==", musicianId)],
+      (data) => {
+        const sorted = [...data].sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? 0;
+          const bTime = b.createdAt?.toMillis?.() ?? 0;
+          return bTime - aTime;
+        });
+        setMusic(sorted);
+        setLoading(false);
+      }
     );
     return unsub;
   }, [musicianId]);
@@ -145,8 +161,16 @@ export function useTikTokerVideos(tiktokerId: string) {
   useEffect(() => {
     if (!tiktokerId) return;
     const unsub = subscribeTikTok(
-      [where("tiktokerId", "==", tiktokerId), orderBy("createdAt", "desc")],
-      (data) => { setVideos(data); setLoading(false); }
+      [where("tiktokerId", "==", tiktokerId)],
+      (data) => {
+        const sorted = [...data].sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? 0;
+          const bTime = b.createdAt?.toMillis?.() ?? 0;
+          return bTime - aTime;
+        });
+        setVideos(sorted);
+        setLoading(false);
+      }
     );
     return unsub;
   }, [tiktokerId]);
