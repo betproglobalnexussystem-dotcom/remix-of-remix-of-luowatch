@@ -179,15 +179,36 @@ export async function addEpisode(data: Omit<FireEpisode, "id" | "createdAt">) {
 }
 
 export async function getEpisodes(movieId: string) {
-  const q = query(collection(db, "episodes"), where("movieId", "==", movieId), orderBy("season"), orderBy("episode"));
+  const q = query(collection(db, "episodes"), where("movieId", "==", movieId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as FireEpisode));
+  const episodes = snap.docs.map(d => ({ id: d.id, ...d.data() } as FireEpisode));
+
+  const toSortableNumber = (value: string) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+  };
+
+  return episodes.sort((a, b) => {
+    const seasonDiff = toSortableNumber(a.season) - toSortableNumber(b.season);
+    if (seasonDiff !== 0) return seasonDiff;
+
+    const episodeDiff = toSortableNumber(a.episode) - toSortableNumber(b.episode);
+    if (episodeDiff !== 0) return episodeDiff;
+
+    return (a.episode || "").localeCompare(b.episode || "");
+  });
 }
 
 export async function getEpisodesByVJ(vjId: string) {
-  const q = query(collection(db, "episodes"), where("vjId", "==", vjId), orderBy("createdAt", "desc"));
+  const q = query(collection(db, "episodes"), where("vjId", "==", vjId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as FireEpisode));
+  const episodes = snap.docs.map(d => ({ id: d.id, ...d.data() } as FireEpisode));
+
+  return episodes.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis?.() ?? 0;
+    const bTime = b.createdAt?.toMillis?.() ?? 0;
+    return bTime - aTime;
+  });
 }
 
 export async function updateEpisode(id: string, data: Partial<FireEpisode>) {
