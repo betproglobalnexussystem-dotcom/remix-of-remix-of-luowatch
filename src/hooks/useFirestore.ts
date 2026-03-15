@@ -110,8 +110,16 @@ export function useMusicianVideos(musicianId: string) {
   useEffect(() => {
     if (!musicianId) return;
     const unsub = subscribeMusic(
-      [where("musicianId", "==", musicianId), orderBy("createdAt", "desc")],
-      (data) => { setMusic(data); setLoading(false); }
+      [where("musicianId", "==", musicianId)],
+      (data) => {
+        const sorted = [...data].sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? 0;
+          const bTime = b.createdAt?.toMillis?.() ?? 0;
+          return bTime - aTime;
+        });
+        setMusic(sorted);
+        setLoading(false);
+      }
     );
     return unsub;
   }, [musicianId]);
