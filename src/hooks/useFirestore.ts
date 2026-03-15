@@ -47,8 +47,16 @@ export function useVJMovies(vjId: string) {
   useEffect(() => {
     if (!vjId) return;
     const unsub = subscribeMovies(
-      [where("vjId", "==", vjId), orderBy("createdAt", "desc")],
-      (data) => { setMovies(data); setLoading(false); }
+      [where("vjId", "==", vjId)],
+      (data) => {
+        const sorted = [...data].sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? 0;
+          const bTime = b.createdAt?.toMillis?.() ?? 0;
+          return bTime - aTime;
+        });
+        setMovies(sorted);
+        setLoading(false);
+      }
     );
     return unsub;
   }, [vjId]);
