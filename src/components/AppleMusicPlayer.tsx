@@ -1,8 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import {
-  Play, Pause, Volume2, VolumeX, Maximize, Minimize,
-  SkipBack, SkipForward, Loader2, AlertCircle,
-  PictureInPicture2
+  Play, Pause, Maximize, Minimize,
+  Loader2, AlertCircle, Volume2, VolumeX
 } from "lucide-react";
 
 interface AppleMusicPlayerProps {
@@ -96,24 +95,10 @@ const AppleMusicPlayer = ({ src, poster, title, artist }: AppleMusicPlayerProps)
     if (v) { v.currentTime = time; setCurrentTime(time); }
   };
 
-  const skip = (delta: number) => {
-    const v = videoRef.current;
-    if (v) seek(Math.max(0, Math.min(v.duration, v.currentTime + delta)));
-  };
-
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (document.fullscreenElement) document.exitFullscreen();
     else containerRef.current.requestFullscreen();
-  };
-
-  const togglePiP = async () => {
-    const v = videoRef.current;
-    if (!v) return;
-    try {
-      if (document.pictureInPictureElement) await document.exitPictureInPicture();
-      else await v.requestPictureInPicture();
-    } catch {}
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -130,7 +115,7 @@ const AppleMusicPlayer = ({ src, poster, title, artist }: AppleMusicPlayerProps)
     <div
       ref={containerRef}
       className="relative w-full h-full group select-none overflow-hidden"
-      style={{ background: "linear-gradient(145deg, #1a1a2e 0%, #0d0d1a 50%, #16213e 100%)" }}
+      style={{ background: "#000" }}
       onMouseMove={resetHideTimer}
       onMouseLeave={() => playing && setShowControls(false)}
       onClick={(e) => {
@@ -151,137 +136,93 @@ const AppleMusicPlayer = ({ src, poster, title, artist }: AppleMusicPlayerProps)
       {/* Loading */}
       {isLoading && !hasError && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center"
-            style={{ background: "rgba(255,255,255,0.08)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
-            <Loader2 className="w-8 h-8 animate-spin" style={{ color: "rgba(255,255,255,0.9)" }} />
-          </div>
+          <Loader2 className="w-8 h-8 animate-spin" style={{ color: "rgba(255,255,255,0.7)" }} />
         </div>
       )}
 
       {/* Error */}
       {hasError && (
-        <div className="absolute inset-0 flex items-center justify-center z-10"
-          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(10px)" }}>
-          <div className="flex flex-col items-center gap-3 text-center px-4">
-            <AlertCircle className="w-10 h-10" style={{ color: "rgba(255,100,100,0.9)" }} />
-            <span className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.9)" }}>Failed to load video</span>
+        <div className="absolute inset-0 flex items-center justify-center z-10" style={{ background: "rgba(0,0,0,0.7)" }}>
+          <div className="flex flex-col items-center gap-2 text-center px-4">
+            <AlertCircle className="w-8 h-8" style={{ color: "rgba(255,100,100,0.9)" }} />
+            <span className="text-xs" style={{ color: "rgba(255,255,255,0.9)" }}>Failed to load</span>
             <button
               onClick={(e) => { e.stopPropagation(); setHasError(false); setIsLoading(true); videoRef.current?.load(); }}
-              className="px-5 py-2 rounded-full text-xs font-semibold transition-all"
-              style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)", backdropFilter: "blur(10px)" }}
-            >
-              Retry
-            </button>
+              className="px-4 py-1.5 rounded-full text-[10px] font-semibold"
+              style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.9)" }}
+            >Retry</button>
           </div>
         </div>
       )}
 
-      {/* Big play button - Apple style */}
+      {/* Big play button */}
       {!playing && !isLoading && !hasError && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
-            style={{ background: "rgba(255,255,255,0.12)", backdropFilter: "blur(30px)", WebkitBackdropFilter: "blur(30px)", boxShadow: "0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)" }}>
-            <Play className="w-9 h-9 ml-1" fill="rgba(255,255,255,0.95)" style={{ color: "rgba(255,255,255,0.95)" }} />
+          <div className="w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center"
+            style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(20px)" }}>
+            <Play className="w-7 h-7 ml-0.5" fill="rgba(255,255,255,0.9)" style={{ color: "rgba(255,255,255,0.9)" }} />
           </div>
         </div>
       )}
 
-      {/* Title bar - frosted glass */}
-      {showControls && (title || artist) && (
-        <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none transition-opacity duration-500"
-          style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%)" }}>
-          <div className="px-4 py-3 flex items-center gap-3">
-            <img src="/logo.png" alt="LuoWatch" className="h-5 w-auto opacity-80" />
-            <div className="min-w-0">
-              {title && <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.95)" }}>{title}</p>}
-              {artist && <p className="text-[10px] truncate" style={{ color: "rgba(255,255,255,0.55)" }}>{artist}</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Controls - Apple frosted glass bar */}
+      {/* Slim bottom control bar */}
       <div
         data-controls
-        className={`absolute bottom-0 left-0 right-0 z-20 transition-all duration-500 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"}`}
+        className={`absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.7))" }}
       >
-        <div
-          className="mx-2 mb-2 rounded-xl overflow-hidden md:mx-3 md:mb-2 md:rounded-2xl"
-          style={{ background: "rgba(30,30,40,0.65)", backdropFilter: "blur(40px) saturate(180%)", WebkitBackdropFilter: "blur(40px) saturate(180%)", boxShadow: "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)" }}
-        >
-          
-          {/* Progress bar */}
-          <div className="px-3 pt-2 md:px-3 md:pt-2.5">
-            <div
-              ref={progressRef}
-              className="relative h-4 cursor-pointer flex items-center group/prog md:h-5"
-              onClick={handleProgressClick}
-              onMouseDown={(e) => { const onMove = (ev: MouseEvent) => { const rect = progressRef.current?.getBoundingClientRect(); if (rect && duration) { const r = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width)); seek(r * duration); } }; const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); }; window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp); }}
-            >
-              <div className="w-full h-0.5 group-hover/prog:h-1 rounded-full transition-all" style={{ background: "rgba(255,255,255,0.12)" }}>
-                <div className="absolute top-1/2 -translate-y-1/2 left-0 h-0.5 group-hover/prog:h-1 rounded-full transition-all" style={{ width: `${bufferedPct}%`, background: "rgba(255,255,255,0.18)" }} />
-                <div className="absolute top-1/2 -translate-y-1/2 left-0 h-0.5 group-hover/prog:h-1 rounded-full transition-all" style={{ width: `${progress}%`, background: "linear-gradient(90deg, #fa2d6a, #a855f7)" }}>
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full opacity-0 group-hover/prog:opacity-100 transition-opacity"
-                    style={{ background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }} />
-                </div>
+        {/* Progress bar */}
+        <div className="px-2 md:px-3">
+          <div
+            ref={progressRef}
+            className="relative h-3 cursor-pointer flex items-center group/prog"
+            onClick={handleProgressClick}
+            onMouseDown={(e) => {
+              const onMove = (ev: MouseEvent) => {
+                const rect = progressRef.current?.getBoundingClientRect();
+                if (rect && duration) { seek(Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width)) * duration); }
+              };
+              const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+              window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+            }}
+          >
+            <div className="w-full h-[3px] group-hover/prog:h-1 rounded-full transition-all" style={{ background: "rgba(255,255,255,0.2)" }}>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[3px] group-hover/prog:h-1 rounded-full transition-all" style={{ width: `${bufferedPct}%`, background: "rgba(255,255,255,0.25)" }} />
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[3px] group-hover/prog:h-1 rounded-full transition-all" style={{ width: `${progress}%`, background: "#fa2d6a" }}>
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full opacity-0 group-hover/prog:opacity-100 transition-opacity" style={{ background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }} />
               </div>
             </div>
-            <div className="flex justify-between -mt-0.5 mb-0.5">
-              <span className="text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>{formatTime(currentTime)}</span>
-              <span className="text-[9px] tabular-nums" style={{ color: "rgba(255,255,255,0.45)" }}>{formatTime(duration)}</span>
-            </div>
           </div>
+        </div>
 
-          {/* Buttons */}
-          <div className="flex items-center justify-between px-3 pb-2 md:px-3 md:pb-2.5">
-            <div className="flex items-center gap-1">
-              <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }}
-                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
-                style={{ color: "rgba(255,255,255,0.7)" }}>
-                {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Volume2 className="w-3.5 h-3.5 md:w-4 md:h-4" />}
-              </button>
-              <input
-                type="range" min="0" max="1" step="0.05"
-                value={muted ? 0 : volume}
-                onChange={(e) => { setVolume(parseFloat(e.target.value)); setMuted(false); }}
-                onClick={(e) => e.stopPropagation()}
-                className="w-12 h-1 cursor-pointer accent-white/80 md:w-14"
-              />
-            </div>
+        {/* Controls row */}
+        <div className="flex items-center gap-1.5 px-2 pb-1.5 pt-0.5 md:px-3 md:pb-2">
+          <button onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            className="p-1 md:p-1.5" style={{ color: "rgba(255,255,255,0.9)" }}>
+            {playing ? <Pause className="w-4 h-4" fill="currentColor" /> : <Play className="w-4 h-4 ml-0.5" fill="currentColor" />}
+          </button>
 
-            {/* Center controls */}
-            <div className="flex items-center gap-2 md:gap-2.5">
-              <button onClick={(e) => { e.stopPropagation(); skip(-10); }}
-                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
-                style={{ color: "rgba(255,255,255,0.8)" }}>
-                <SkipBack className="w-4 h-4 md:w-[18px] md:h-[18px]" />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                className="p-2 rounded-full transition-all hover:scale-105 md:p-2.5"
-                style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.95)" }}>
-                {playing ? <Pause className="w-5 h-5" fill="currentColor" /> : <Play className="w-5 h-5 ml-0.5" fill="currentColor" />}
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); skip(10); }}
-                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
-                style={{ color: "rgba(255,255,255,0.8)" }}>
-                <SkipForward className="w-4 h-4 md:w-[18px] md:h-[18px]" />
-              </button>
-            </div>
+          <span className="text-[9px] md:text-[10px] tabular-nums whitespace-nowrap" style={{ color: "rgba(255,255,255,0.6)" }}>
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </span>
 
-            {/* Right controls */}
-            <div className="flex items-center gap-1">
-              <button onClick={(e) => { e.stopPropagation(); togglePiP(); }}
-                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
-                style={{ color: "rgba(255,255,255,0.7)" }}>
-                <PictureInPicture2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
-                className="p-1.5 rounded-full transition-colors hover:bg-white/10 md:p-2"
-                style={{ color: "rgba(255,255,255,0.7)" }}>
-                {isFullscreen ? <Minimize className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Maximize className="w-3.5 h-3.5 md:w-4 md:h-4" />}
-              </button>
-            </div>
-          </div>
+          <div className="flex-1" />
+
+          {title && (
+            <span className="text-[9px] md:text-[10px] truncate max-w-[120px] md:max-w-[200px] hidden sm:block" style={{ color: "rgba(255,255,255,0.5)" }}>
+              {title}
+            </span>
+          )}
+
+          <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }}
+            className="p-1 hidden md:block" style={{ color: "rgba(255,255,255,0.6)" }}>
+            {muted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
+
+          <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+            className="p-1" style={{ color: "rgba(255,255,255,0.6)" }}>
+            {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+          </button>
         </div>
       </div>
     </div>

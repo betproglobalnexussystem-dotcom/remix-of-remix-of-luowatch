@@ -161,8 +161,16 @@ export function useTikTokerVideos(tiktokerId: string) {
   useEffect(() => {
     if (!tiktokerId) return;
     const unsub = subscribeTikTok(
-      [where("tiktokerId", "==", tiktokerId), orderBy("createdAt", "desc")],
-      (data) => { setVideos(data); setLoading(false); }
+      [where("tiktokerId", "==", tiktokerId)],
+      (data) => {
+        const sorted = [...data].sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() ?? 0;
+          const bTime = b.createdAt?.toMillis?.() ?? 0;
+          return bTime - aTime;
+        });
+        setVideos(sorted);
+        setLoading(false);
+      }
     );
     return unsub;
   }, [tiktokerId]);
