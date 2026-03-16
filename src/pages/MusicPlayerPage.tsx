@@ -1,8 +1,7 @@
 import { useParams, Link } from "react-router-dom";
-import LoadingScreen from "@/components/LoadingScreen";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Share2, Download, Loader2 } from "lucide-react";
-import { useMusicById, useMusicVideos } from "@/hooks/useFirestore";
+import { useMusicVideos } from "@/hooks/useFirestore";
 import { incrementMusicPlays, logActivity, getMusicById } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -17,38 +16,48 @@ const INTERNAL_ROLES = ["vj", "admin", "musician", "tiktoker"];
 
 const MusicPlayerPage = () => {
   const { id } = useParams();
-  const { music: video, loading } = useMusicById(id || "");
+  // Use the real-time subscription — if user came from MusicPage, data is already loaded
   const { music: allMusic } = useMusicVideos();
   const { user, setShowAuthModal, setAuthModalTab } = useAuth();
   const { hasContentAccess, openSubModal } = useSubscription();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  // video state — initialised from allMusic subscription or individual fetch
+  const [video, setVideo] = useState<any | null>(null);
+  const hasFetched = useRef(false);
 
+  // Step 1: try to resolve from already-loaded subscription data immediately
   useEffect(() => {
-    if (id) {
-      incrementMusicPlays(id).catch(() => {});
-      if (user) {
-        getMusicById(id).then(m => {
-          if (m) logActivity({
-            type: "view", contentType: "music", contentId: id,
-            contentTitle: m.title, userId: user.id,
-            userName: `${user.firstName} ${user.lastName}`.trim() || user.email
-          }).catch(() => {});
-        });
-      }
-    }
-  }, [id, user]);
+    if (!id) return;
+    const found = allMusic.find(m => m.id === id);
+    if (found) { setVideo(found); return; }
+  }, [id, allMusic]);
 
-  if (loading) return <LoadingScreen />;
-  if (!video) return (
-    <div className="min-h-screen bg-background flex items-center justify-center text-foreground text-sm">
-      Video not found
-    </div>
-  );
+  // Step 2: if subscription hasn't delivered it yet, do a direct getDoc (fallback)
+  useEffect(() => {
+    if (!id || video || hasFetched.current) return;
+    hasFetched.current = true;
+    getMusicById(id).then(m => { if (m) setVideo(m); });
+  }, [id, video]);
+
+  // Log play once we have the video data
+  useEffect(() => {
+    if (!id || !video) return;
+    incrementMusicPlays(id).catch(() => {});
+    if (user) {
+      logActivity({
+        type: "view", contentType: "music", contentId: id,
+        contentTitle: video.title, userId: user.id,
+        userName: `${user.firstName} ${user.lastName}`.trim() || user.email,
+      }).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, !!video]);
 
   const relatedVideos = allMusic.filter(v => v.id !== id);
 
   const handleShare = async () => {
+    if (!video) return;
     const url = window.location.href;
     if (user) logActivity({ type: "share", contentType: "music", contentId: id!, contentTitle: video.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
     if (navigator.share) {
@@ -60,6 +69,7 @@ const MusicPlayerPage = () => {
   };
 
   const handleDownload = async () => {
+    if (!video) return;
     if (!user) { setAuthModalTab("login"); setShowAuthModal(true); return; }
     if (!hasContentAccess) { openSubModal("content"); return; }
     if (!video.videoUrl) { toast.error("No download available"); return; }
@@ -85,7 +95,6 @@ const MusicPlayerPage = () => {
 
     logActivity({ type: "download", contentType: "music", contentId: id!, contentTitle: video.title, userId: user.id, userName: `${user.firstName} ${user.lastName}`.trim() || user.email }).catch(() => {});
 
-    // Blob download — forces browser Save dialog instead of playing in tab
     setDownloading(true);
     toast.info("Starting download...");
     try {
@@ -102,7 +111,6 @@ const MusicPlayerPage = () => {
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
       toast.success("Download started!");
     } catch {
-      // Fallback: open in new tab
       window.open(video.videoUrl, "_blank");
       toast.info("Opened in new tab — use your browser's save option.");
     } finally {
@@ -114,46 +122,58 @@ const MusicPlayerPage = () => {
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <div className="max-w-7xl mx-auto px-3 py-3">
         <div className="flex gap-4">
-          {/* Main content */}
+
+          {/* Main */}
           <main className="flex-1 min-w-0">
-            {/* Player — 16:9 on all screens */}
+
+            {/* Player area — always rendered immediately, no blocking loader */}
             <div className="w-full aspect-video bg-black rounded-xl overflow-hidden mb-3 shadow-lg">
-              {video.videoUrl ? (
+              {video?.videoUrl ? (
                 <MusicVideoPlayer
                   src={video.videoUrl}
                   poster={video.thumbnailUrl}
                   title={video.title}
                   artist={video.musicianName || video.artist}
                 />
-              ) : video.thumbnailUrl ? (
-                <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
+              ) : video?.thumbnailUrl ? (
+                /* Data loaded but no video URL — show thumbnail */
+                <img src={video.thumbnailUrl} alt={video?.title || ""} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
-                  No video available
+                /* Still loading data — show spinner inside player area, not full-screen */
+                <div className="w-full h-full flex items-center justify-center">
+                  <Loader2 className="w-10 h-10 animate-spin text-white/50" />
                 </div>
               )}
             </div>
 
-            {/* Title */}
-            <h1 className="text-foreground text-sm font-bold mb-2 leading-tight">{video.title}</h1>
+            {/* Title skeleton while loading */}
+            {video ? (
+              <h1 className="text-foreground text-sm font-bold mb-2 leading-tight">{video.title}</h1>
+            ) : (
+              <div className="h-4 w-2/3 bg-secondary rounded animate-pulse mb-2" />
+            )}
 
             {/* Artist row + actions */}
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-[11px] font-bold text-muted-foreground">
-                  {(video.musicianName || video.artist)?.[0]?.toUpperCase() || "M"}
+              {video ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-[11px] font-bold text-muted-foreground">
+                    {(video.musicianName || video.artist)?.[0]?.toUpperCase() || "M"}
+                  </div>
+                  <div>
+                    <span className="text-foreground text-[11px] font-bold">{video.musicianName || video.artist}</span>
+                    {video.verified && <span className="text-muted-foreground text-[10px] ml-1">✓</span>}
+                  </div>
+                  <button
+                    onClick={() => setIsSubscribed(!isSubscribed)}
+                    className={`ml-2 px-3 py-1 rounded-full text-[10px] font-bold transition-colors ${isSubscribed ? "bg-secondary text-secondary-foreground" : "bg-foreground text-background"}`}
+                  >
+                    {isSubscribed ? "Subscribed" : "Subscribe"}
+                  </button>
                 </div>
-                <div>
-                  <span className="text-foreground text-[11px] font-bold">{video.musicianName || video.artist}</span>
-                  {video.verified && <span className="text-muted-foreground text-[10px] ml-1">✓</span>}
-                </div>
-                <button
-                  onClick={() => setIsSubscribed(!isSubscribed)}
-                  className={`ml-2 px-3 py-1 rounded-full text-[10px] font-bold transition-colors ${isSubscribed ? "bg-secondary text-secondary-foreground" : "bg-foreground text-background"}`}
-                >
-                  {isSubscribed ? "Subscribed" : "Subscribe"}
-                </button>
-              </div>
+              ) : (
+                <div className="h-8 w-48 bg-secondary rounded animate-pulse" />
+              )}
 
               <div className="flex items-center gap-1">
                 <button
@@ -174,13 +194,15 @@ const MusicPlayerPage = () => {
             </div>
 
             {/* Meta */}
-            <div className="bg-secondary rounded-lg p-3 mb-4">
-              <div className="flex items-center gap-2 text-[11px] text-foreground font-bold">
-                <span>{video.plays} plays</span>
-                {video.genre && <><span>·</span><span>{video.genre}</span></>}
-                {video.year && <><span>·</span><span>{video.year}</span></>}
+            {video && (
+              <div className="bg-secondary rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 text-[11px] text-foreground font-bold">
+                  <span>{video.plays} plays</span>
+                  {video.genre && <><span>·</span><span>{video.genre}</span></>}
+                  {video.year && <><span>·</span><span>{video.year}</span></>}
+                </div>
               </div>
-            </div>
+            )}
 
             <CommentSection contentId={id || ""} contentType="music" />
           </main>
@@ -204,6 +226,7 @@ const MusicPlayerPage = () => {
               </Link>
             ))}
           </aside>
+
         </div>
       </div>
     </div>
