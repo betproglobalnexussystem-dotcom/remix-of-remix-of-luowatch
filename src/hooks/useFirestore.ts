@@ -6,6 +6,7 @@ import {
   getChannels, getMovieById, getMusicById, getEpisodes, getComments,
   FireEpisode,
 } from "@/lib/firestore";
+import { getAllMusic, getMusicFromCache, subscribeToMusicCache, isMusicCacheReady } from "@/lib/musicCache";
 
 export function useMovies(constraints?: QueryConstraint[]) {
   const [movies, setMovies] = useState<FireMovie[]>([]);
@@ -88,12 +89,14 @@ export function useEpisodes(movieId: string) {
   return { episodes, loading };
 }
 
-export function useMusicVideos(constraints?: QueryConstraint[]) {
-  const [music, setMusic] = useState<FireMusic[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useMusicVideos(_constraints?: QueryConstraint[]) {
+  // Read from global cache synchronously — if already loaded, no wait at all
+  const [music, setMusic] = useState<FireMusic[]>(() => getAllMusic());
+  const [loading, setLoading] = useState(() => !isMusicCacheReady());
 
   useEffect(() => {
-    const unsub = subscribeMusic(constraints || [orderBy("createdAt", "desc")], (data) => {
+    // Subscribe to live updates from the global singleton cache
+    const unsub = subscribeToMusicCache((data) => {
       setMusic(data);
       setLoading(false);
     });
@@ -128,12 +131,29 @@ export function useMusicianVideos(musicianId: string) {
 }
 
 export function useMusicById(id: string) {
-  const [music, setMusic] = useState<FireMusic | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Initialize synchronously from cache — zero delay if cache is warm
+  const [music, setMusic] = useState<FireMusic | null>(() => (id ? getMusicFromCache(id) : null));
+  const [loading, setLoading] = useState(() => !id || (!getMusicFromCache(id) && !isMusicCacheReady()));
 
   useEffect(() => {
     if (!id) return;
-    getMusicById(id).then(m => { setMusic(m); setLoading(false); });
+
+    // Check cache right now in case it arrived between render and effect
+    const cached = getMusicFromCache(id);
+    if (cached) { setMusic(cached); setLoading(false); return; }
+
+    // Subscribe to cache updates — fires immediately when cache fills
+    const unsub = subscribeToMusicCache((all) => {
+      const found = all.find((m) => m.id === id);
+      if (found) { setMusic(found); setLoading(false); }
+    });
+
+    // Also run a direct Firestore fetch in parallel as a safety net
+    getMusicById(id).then((m) => {
+      if (m) { setMusic(m); setLoading(false); }
+    }).catch(() => {});
+
+    return unsub;
   }, [id]);
 
   return { music, loading };

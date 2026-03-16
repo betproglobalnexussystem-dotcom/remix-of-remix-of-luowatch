@@ -1,8 +1,8 @@
 import { useParams, Link } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Share2, Download, Loader2 } from "lucide-react";
-import { useMusicVideos } from "@/hooks/useFirestore";
-import { incrementMusicPlays, logActivity, getMusicById } from "@/lib/firestore";
+import { useMusicById, useMusicVideos } from "@/hooks/useFirestore";
+import { incrementMusicPlays, logActivity } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { creditMusicianDownload, isAdminActivatedSub } from "@/lib/earnings";
@@ -16,31 +16,15 @@ const INTERNAL_ROLES = ["vj", "admin", "musician", "tiktoker"];
 
 const MusicPlayerPage = () => {
   const { id } = useParams();
-  // Use the real-time subscription — if user came from MusicPage, data is already loaded
+  // useMusicById now reads synchronously from global cache if warm
+  const { music: video } = useMusicById(id || "");
+  // useMusicVideos also reads from the same warm cache
   const { music: allMusic } = useMusicVideos();
   const { user, setShowAuthModal, setAuthModalTab } = useAuth();
   const { hasContentAccess, openSubModal } = useSubscription();
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  // video state — initialised from allMusic subscription or individual fetch
-  const [video, setVideo] = useState<any | null>(null);
-  const hasFetched = useRef(false);
 
-  // Step 1: try to resolve from already-loaded subscription data immediately
-  useEffect(() => {
-    if (!id) return;
-    const found = allMusic.find(m => m.id === id);
-    if (found) { setVideo(found); return; }
-  }, [id, allMusic]);
-
-  // Step 2: if subscription hasn't delivered it yet, do a direct getDoc (fallback)
-  useEffect(() => {
-    if (!id || video || hasFetched.current) return;
-    hasFetched.current = true;
-    getMusicById(id).then(m => { if (m) setVideo(m); });
-  }, [id, video]);
-
-  // Log play once we have the video data
   useEffect(() => {
     if (!id || !video) return;
     incrementMusicPlays(id).catch(() => {});
@@ -123,10 +107,8 @@ const MusicPlayerPage = () => {
       <div className="max-w-7xl mx-auto px-3 py-3">
         <div className="flex gap-4">
 
-          {/* Main */}
           <main className="flex-1 min-w-0">
-
-            {/* Player area — always rendered immediately, no blocking loader */}
+            {/* Player — always rendered, spinner inside if no URL yet */}
             <div className="w-full aspect-video bg-black rounded-xl overflow-hidden mb-3 shadow-lg">
               {video?.videoUrl ? (
                 <MusicVideoPlayer
@@ -136,24 +118,22 @@ const MusicPlayerPage = () => {
                   artist={video.musicianName || video.artist}
                 />
               ) : video?.thumbnailUrl ? (
-                /* Data loaded but no video URL — show thumbnail */
-                <img src={video.thumbnailUrl} alt={video?.title || ""} className="w-full h-full object-cover" />
+                <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
               ) : (
-                /* Still loading data — show spinner inside player area, not full-screen */
                 <div className="w-full h-full flex items-center justify-center">
-                  <Loader2 className="w-10 h-10 animate-spin text-white/50" />
+                  <Loader2 className="w-10 h-10 animate-spin text-white/40" />
                 </div>
               )}
             </div>
 
-            {/* Title skeleton while loading */}
+            {/* Title */}
             {video ? (
               <h1 className="text-foreground text-sm font-bold mb-2 leading-tight">{video.title}</h1>
             ) : (
               <div className="h-4 w-2/3 bg-secondary rounded animate-pulse mb-2" />
             )}
 
-            {/* Artist row + actions */}
+            {/* Artist + actions */}
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
               {video ? (
                 <div className="flex items-center gap-2">
@@ -176,10 +156,7 @@ const MusicPlayerPage = () => {
               )}
 
               <div className="flex items-center gap-1">
-                <button
-                  onClick={handleShare}
-                  className="flex items-center gap-1 bg-secondary rounded-full px-3 py-1.5 text-[10px] text-foreground hover:bg-muted transition-colors"
-                >
+                <button onClick={handleShare} className="flex items-center gap-1 bg-secondary rounded-full px-3 py-1.5 text-[10px] text-foreground hover:bg-muted transition-colors">
                   <Share2 className="w-3.5 h-3.5" /> Share
                 </button>
                 <button
@@ -193,7 +170,6 @@ const MusicPlayerPage = () => {
               </div>
             </div>
 
-            {/* Meta */}
             {video && (
               <div className="bg-secondary rounded-lg p-3 mb-4">
                 <div className="flex items-center gap-2 text-[11px] text-foreground font-bold">
@@ -207,16 +183,15 @@ const MusicPlayerPage = () => {
             <CommentSection contentId={id || ""} contentType="music" />
           </main>
 
-          {/* Related sidebar (desktop only) */}
+          {/* Related sidebar */}
           <aside className="w-72 flex-shrink-0 space-y-2 hidden md:block">
             {relatedVideos.map((v) => (
               <Link to={`/music/${v.id}`} key={v.id} className="flex gap-2 group">
                 <div className="relative w-40 flex-shrink-0">
-                  {v.thumbnailUrl ? (
-                    <img src={v.thumbnailUrl} alt="" className="w-full aspect-video object-cover rounded group-hover:scale-105 transition-transform" />
-                  ) : (
-                    <div className="w-full aspect-video bg-secondary rounded" />
-                  )}
+                  {v.thumbnailUrl
+                    ? <img src={v.thumbnailUrl} alt="" className="w-full aspect-video object-cover rounded group-hover:scale-105 transition-transform" />
+                    : <div className="w-full aspect-video bg-secondary rounded" />
+                  }
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-foreground text-[10px] font-semibold leading-tight line-clamp-2">{v.title}</p>
