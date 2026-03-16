@@ -1,4 +1,4 @@
-const API_BASE = "https://api.livrauganda.workers.dev/api";
+const API_BASE = "https://function-bun-production-ac72.up.railway.app/api";
 
 export interface PaymentResponse {
   success: boolean;
@@ -33,6 +33,18 @@ export interface Transaction {
   reference?: string;
   description?: string;
   created_at?: string;
+  [key: string]: any;
+}
+
+export interface CardPaymentPayload {
+  amount: number;
+  currency?: string;
+  card_number: string;
+  expiry_month: string;
+  expiry_year: string;
+  cvv: string;
+  email?: string;
+  description?: string;
   [key: string]: any;
 }
 
@@ -84,6 +96,16 @@ export async function getTransactionHistory(): Promise<any> {
   return res.json();
 }
 
+// Card payment
+export async function cardPayment(payload: CardPaymentPayload): Promise<PaymentResponse> {
+  const res = await fetch(`${API_BASE}/card/payment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 // Format phone number to +256 format
 export function formatPhone(phone: string): string {
   let cleaned = phone.replace(/\s+/g, "").replace(/-/g, "");
@@ -114,7 +136,7 @@ export function pollPaymentStatus(
     try {
       const data = await checkRequestStatus(internalReference);
       console.log("Payment status poll:", data);
-      
+
       if (data.success && (data.request_status === "success" || data.status === "success")) {
         onSuccess(data);
         return;
