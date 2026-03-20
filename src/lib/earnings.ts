@@ -25,7 +25,7 @@ export interface EarningTransaction {
   id: string;
   creatorId: string;
   creatorName: string;
-  type: "download_credit" | "withdrawal" | "milestone_bonus";
+  type: "download_credit" | "withdrawal" | "milestone_bonus" | "admin_credit";
   amount: number;
   contentId: string;
   contentTitle: string;
@@ -33,6 +33,7 @@ export interface EarningTransaction {
   downloadedByName: string;
   status: "completed" | "pending" | "failed";
   phone?: string;
+  note?: string;
   createdAt: Timestamp | null;
 }
 
@@ -255,6 +256,42 @@ export async function isAdminActivatedSub(userId: string): Promise<boolean> {
   if (!contentDoc.exists()) return false;
   const data = contentDoc.data();
   return data.transactionRef?.startsWith("admin_manual_") || data.transactionRef === "admin_bypass";
+}
+
+// Manually credit earnings for a creator (admin use)
+export async function adminCreditEarning(
+  creatorId: string,
+  creatorName: string,
+  creatorRole: "vj" | "musician",
+  amount: number,
+  note: string
+): Promise<void> {
+  const ref = doc(db, "creator_earnings", creatorId);
+
+  // Ensure earning record exists
+  await getOrCreateEarning(creatorId, creatorName, creatorRole);
+
+  // Credit the amount
+  await updateDoc(ref, {
+    totalEarned: increment(amount),
+    balance: increment(amount),
+    updatedAt: serverTimestamp(),
+  });
+
+  // Log the transaction
+  await addDoc(collection(db, "earning_transactions"), {
+    creatorId,
+    creatorName,
+    type: "admin_credit",
+    amount,
+    contentId: "",
+    contentTitle: "",
+    downloadedByUserId: "",
+    downloadedByName: "",
+    note: note || "Manual credit by admin",
+    status: "completed",
+    createdAt: serverTimestamp(),
+  });
 }
 
 // Reset all movie/music download & view counts to 0

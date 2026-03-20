@@ -22,7 +22,7 @@ import {
   Plus, Search, Shield, Crown, DollarSign, RefreshCw, X, Check,
   Download, UserPlus, Upload, Wallet, List, Loader2, ArrowDownToLine, Image, TrendingUp
 } from "lucide-react";
-import { getAllCreatorEarnings, getAllEarningTransactions, resetAllContentCounts, CreatorEarning, EarningTransaction } from "@/lib/earnings";
+import { getAllCreatorEarnings, getAllEarningTransactions, resetAllContentCounts, adminCreditEarning, CreatorEarning, EarningTransaction } from "@/lib/earnings";
 import { cn } from "@/lib/utils";
 import { genreList } from "@/data/categories";
 
@@ -973,6 +973,13 @@ const CreatorEarningsTab = () => {
   const [resetting, setResetting] = useState(false);
   const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
 
+  // Manual credit form
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [creditCreatorId, setCreditCreatorId] = useState("");
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditNote, setCreditNote] = useState("");
+  const [crediting, setCrediting] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -984,6 +991,23 @@ const CreatorEarningsTab = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const handleManualCredit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseInt(creditAmount, 10);
+    if (!creditCreatorId) { toast.error("Select a creator"); return; }
+    if (!amount || amount <= 0) { toast.error("Enter a valid amount"); return; }
+    const creator = earnings.find(c => c.id === creditCreatorId);
+    if (!creator) { toast.error("Creator not found"); return; }
+    setCrediting(true);
+    try {
+      await adminCreditEarning(creator.id, creator.creatorName, creator.creatorRole, amount, creditNote.trim() || "Manual credit by admin");
+      toast.success(`UGX ${amount.toLocaleString()} credited to ${creator.creatorName}`);
+      setCreditCreatorId(""); setCreditAmount(""); setCreditNote(""); setCreditOpen(false);
+      await fetchData();
+    } catch { toast.error("Failed to credit earning"); }
+    setCrediting(false);
+  };
 
   const handleResetCounts = async () => {
     if (!confirm("This will reset ALL movie/music view and download counters to 0. Are you sure?")) return;
@@ -1005,17 +1029,59 @@ const CreatorEarningsTab = () => {
   const creatorTransactions = selectedCreator ? transactions.filter(t => t.creatorId === selectedCreator) : transactions;
   const formatUGX = (n: number) => `UGX ${n.toLocaleString()}`;
 
+  const inputCls = "w-full bg-secondary text-foreground text-xs px-3 py-2 rounded border border-border focus:outline-none focus:ring-1 focus:ring-primary";
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-foreground text-sm font-bold">Creator Earnings</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setCreditOpen(o => !o)} className="text-[9px] bg-primary text-primary-foreground px-2.5 py-1 rounded font-bold flex items-center gap-1">
+            <Plus className="w-2.5 h-2.5" /> Manual Credit
+          </button>
           <button onClick={fetchData} className="text-[9px] text-primary font-semibold flex items-center gap-1"><RefreshCw className="w-2.5 h-2.5" /> Refresh</button>
           <button onClick={handleResetCounts} disabled={resetting} className="text-[9px] bg-destructive text-destructive-foreground px-2.5 py-1 rounded font-bold disabled:opacity-50">
             {resetting ? "Resetting..." : "Reset All Content Counts"}
           </button>
         </div>
       </div>
+
+      {/* Manual Credit Form */}
+      {creditOpen && (
+        <div className="bg-card border border-primary/30 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-foreground text-xs font-bold flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-primary" /> Add Manual Earning</h3>
+            <button onClick={() => setCreditOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+          </div>
+          <form onSubmit={handleManualCredit} className="space-y-3">
+            <div>
+              <label className="text-foreground text-[11px] font-semibold mb-1 block">Creator *</label>
+              <select className={inputCls} value={creditCreatorId} onChange={e => setCreditCreatorId(e.target.value)}>
+                <option value="">Select creator...</option>
+                {earnings.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.creatorName} ({c.creatorRole === "vj" ? "VJ" : "Musician"}) — Balance: UGX {c.balance.toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-foreground text-[11px] font-semibold mb-1 block">Amount (UGX) *</label>
+              <input className={inputCls} type="number" min="1" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} placeholder="e.g. 5000" />
+            </div>
+            <div>
+              <label className="text-foreground text-[11px] font-semibold mb-1 block">Reason / Note</label>
+              <input className={inputCls} value={creditNote} onChange={e => setCreditNote(e.target.value)} placeholder="e.g. Bonus for event coverage" />
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" disabled={crediting} className="bg-primary text-primary-foreground px-4 py-1.5 rounded text-xs font-bold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5">
+                {crediting ? <><Loader2 className="w-3 h-3 animate-spin" /> Crediting...</> : <><Check className="w-3 h-3" /> Credit Earning</>}
+              </button>
+              <button type="button" onClick={() => setCreditOpen(false)} className="bg-secondary text-foreground px-4 py-1.5 rounded text-xs font-bold hover:bg-muted">Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -1134,10 +1200,11 @@ const CreatorEarningsTab = () => {
                         <td className="p-1.5"><span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded",
                           tx.type === "download_credit" ? "bg-green-500/20 text-green-400" :
                           tx.type === "withdrawal" ? "bg-yellow-500/20 text-yellow-400" :
+                          tx.type === "admin_credit" ? "bg-blue-500/20 text-blue-400" :
                           "bg-primary/20 text-primary"
-                        )}>{tx.type === "download_credit" ? "Download" : tx.type === "withdrawal" ? "Withdrawal" : "Milestone"}</span></td>
+                        )}>{tx.type === "download_credit" ? "Download" : tx.type === "withdrawal" ? "Withdrawal" : tx.type === "admin_credit" ? "Admin Credit" : "Milestone"}</span></td>
                         <td className="p-1.5 text-foreground font-bold">{tx.type === "withdrawal" ? `-${formatUGX(tx.amount)}` : tx.amount > 0 ? `+${formatUGX(tx.amount)}` : "—"}</td>
-                        <td className="p-1.5 text-muted-foreground truncate max-w-[200px]">{tx.contentTitle || tx.phone || "—"}</td>
+                        <td className="p-1.5 text-muted-foreground truncate max-w-[200px]">{tx.note || tx.contentTitle || tx.phone || "—"}</td>
                         <td className="p-1.5 text-muted-foreground">{tx.createdAt?.toDate ? tx.createdAt.toDate().toLocaleDateString() : "—"}</td>
                       </tr>
                     ))}
