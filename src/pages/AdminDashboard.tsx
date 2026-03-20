@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import {
@@ -22,7 +22,7 @@ import {
   Plus, Search, Shield, Crown, DollarSign, RefreshCw, X, Check,
   Download, UserPlus, Upload, Wallet, List, Loader2, ArrowDownToLine, Image, TrendingUp
 } from "lucide-react";
-import { getAllCreatorEarnings, getAllEarningTransactions, resetAllContentCounts, adminCreditEarning, CreatorEarning, EarningTransaction } from "@/lib/earnings";
+import { getAllCreatorEarnings, getAllEarningTransactions, resetAllContentCounts, adminCreditEarning, adminAddVJDownloads, CreatorEarning, EarningTransaction } from "@/lib/earnings";
 import { cn } from "@/lib/utils";
 import { genreList } from "@/data/categories";
 
@@ -980,6 +980,12 @@ const CreatorEarningsTab = () => {
   const [creditNote, setCreditNote] = useState("");
   const [crediting, setCrediting] = useState(false);
 
+  // Add downloads form (per-VJ inline)
+  const [addDlVjId, setAddDlVjId] = useState<string | null>(null);
+  const [addDlCount, setAddDlCount] = useState("");
+  const [addDlNote, setAddDlNote] = useState("");
+  const [addingDl, setAddingDl] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -1007,6 +1013,19 @@ const CreatorEarningsTab = () => {
       await fetchData();
     } catch { toast.error("Failed to credit earning"); }
     setCrediting(false);
+  };
+
+  const handleAddDownloads = async (vj: CreatorEarning) => {
+    const count = parseInt(addDlCount, 10);
+    if (!count || count <= 0) { toast.error("Enter a valid number of downloads"); return; }
+    setAddingDl(true);
+    try {
+      await adminAddVJDownloads(vj.id, vj.creatorName, count, addDlNote.trim());
+      toast.success(`${count} download${count !== 1 ? "s" : ""} added for ${vj.creatorName} (+UGX ${(count * 250).toLocaleString()})`);
+      setAddDlVjId(null); setAddDlCount(""); setAddDlNote("");
+      await fetchData();
+    } catch { toast.error("Failed to add downloads"); }
+    setAddingDl(false);
   };
 
   const handleResetCounts = async () => {
@@ -1121,18 +1140,64 @@ const CreatorEarningsTab = () => {
                   </tr></thead>
                   <tbody>
                     {vjEarnings.map(e => (
-                      <tr key={e.id} className="border-b border-border last:border-0">
-                        <td className="p-1.5 text-foreground font-semibold">{e.creatorName}</td>
-                        <td className="p-1.5 text-muted-foreground">{e.totalDownloads}</td>
-                        <td className="p-1.5 text-foreground font-bold">{formatUGX(e.totalEarned)}</td>
-                        <td className="p-1.5 text-muted-foreground">{formatUGX(e.totalWithdrawn)}</td>
-                        <td className="p-1.5 text-primary font-bold">{formatUGX(e.balance)}</td>
-                        <td className="p-1.5">
-                          <button onClick={() => setSelectedCreator(selectedCreator === e.id ? null : e.id)} className="text-[9px] bg-secondary text-foreground px-1.5 py-0.5 rounded">
-                            {selectedCreator === e.id ? "Hide" : "Transactions"}
-                          </button>
-                        </td>
-                      </tr>
+                      <React.Fragment key={e.id}>
+                        <tr className="border-b border-border last:border-0">
+                          <td className="p-1.5 text-foreground font-semibold">{e.creatorName}</td>
+                          <td className="p-1.5 text-muted-foreground">{e.totalDownloads}</td>
+                          <td className="p-1.5 text-foreground font-bold">{formatUGX(e.totalEarned)}</td>
+                          <td className="p-1.5 text-muted-foreground">{formatUGX(e.totalWithdrawn)}</td>
+                          <td className="p-1.5 text-primary font-bold">{formatUGX(e.balance)}</td>
+                          <td className="p-1.5">
+                            <div className="flex gap-1 flex-wrap">
+                              <button
+                                onClick={() => { setAddDlVjId(addDlVjId === e.id ? null : e.id); setAddDlCount(""); setAddDlNote(""); }}
+                                className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5"
+                              >
+                                <Download className="w-2.5 h-2.5" /> Add Downloads
+                              </button>
+                              <button onClick={() => setSelectedCreator(selectedCreator === e.id ? null : e.id)} className="text-[9px] bg-secondary text-foreground px-1.5 py-0.5 rounded">
+                                {selectedCreator === e.id ? "Hide" : "Transactions"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {addDlVjId === e.id && (
+                          <tr key={`${e.id}-dl`} className="bg-primary/5 border-b border-border">
+                            <td colSpan={6} className="p-2">
+                              <div className="flex items-end gap-2 flex-wrap">
+                                <div>
+                                  <label className="text-[10px] text-foreground font-semibold mb-0.5 block">Downloads to add *</label>
+                                  <input
+                                    type="number" min="1" value={addDlCount} onChange={e => setAddDlCount(e.target.value)}
+                                    placeholder="e.g. 10"
+                                    className="w-24 bg-secondary text-foreground text-xs px-2 py-1 rounded border border-border focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-[140px]">
+                                  <label className="text-[10px] text-foreground font-semibold mb-0.5 block">Note (optional)</label>
+                                  <input
+                                    type="text" value={addDlNote} onChange={ev => setAddDlNote(ev.target.value)}
+                                    placeholder="e.g. Correction for offline event"
+                                    className="w-full bg-secondary text-foreground text-xs px-2 py-1 rounded border border-border focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                </div>
+                                <div className="flex gap-1.5 items-center">
+                                  {addDlCount && parseInt(addDlCount) > 0 && (
+                                    <span className="text-[9px] text-primary font-semibold">+UGX {(parseInt(addDlCount) * 250).toLocaleString()}</span>
+                                  )}
+                                  <button
+                                    disabled={addingDl} onClick={() => handleAddDownloads(e)}
+                                    className="bg-primary text-primary-foreground px-3 py-1 rounded text-[10px] font-bold disabled:opacity-50 flex items-center gap-1"
+                                  >
+                                    {addingDl ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Check className="w-2.5 h-2.5" />} Confirm
+                                  </button>
+                                  <button onClick={() => setAddDlVjId(null)} className="text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

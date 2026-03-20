@@ -245,6 +245,40 @@ export async function isAdminActivatedSub(userId: string): Promise<boolean> {
   return data.transactionRef?.startsWith("admin_manual_") || data.transactionRef === "admin_bypass";
 }
 
+// Manually add download count + earnings for a VJ (admin use)
+export async function adminAddVJDownloads(
+  vjId: string,
+  vjName: string,
+  count: number,
+  note: string
+): Promise<void> {
+  const amount = count * VJ_RATE_PER_DOWNLOAD;
+  const ref = doc(db, "creator_earnings", vjId);
+
+  await getOrCreateEarning(vjId, vjName, "vj");
+
+  await updateDoc(ref, {
+    totalDownloads: increment(count),
+    totalEarned: increment(amount),
+    balance: increment(amount),
+    updatedAt: serverTimestamp(),
+  });
+
+  await addDoc(collection(db, "earning_transactions"), {
+    creatorId: vjId,
+    creatorName: vjName,
+    type: "download_credit",
+    amount,
+    contentId: "",
+    contentTitle: note || `Admin added ${count} download${count !== 1 ? "s" : ""}`,
+    downloadedByUserId: "",
+    downloadedByName: "",
+    note: note || `Admin added ${count} download${count !== 1 ? "s" : ""}`,
+    status: "completed",
+    createdAt: serverTimestamp(),
+  });
+}
+
 // Manually credit earnings for a creator (admin use)
 export async function adminCreditEarning(
   creatorId: string,
