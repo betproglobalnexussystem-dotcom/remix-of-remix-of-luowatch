@@ -143,14 +143,14 @@ export async function creditMusicianDownload(
     updatedAt: serverTimestamp(),
   });
 
-  // Check if they just hit the milestone
+  // Check if they just hit the milestone — only then log a transaction
   if (newMonthlyDownloads === MUSICIAN_MONTHLY_THRESHOLD) {
     await updateDoc(ref, {
       totalEarned: increment(MUSICIAN_MONTHLY_PAYOUT),
       balance: increment(MUSICIAN_MONTHLY_PAYOUT),
     });
 
-    // Log milestone bonus
+    // Log milestone bonus transaction
     await addDoc(collection(db, "earning_transactions"), {
       creatorId: musicianId,
       creatorName: musicianName,
@@ -164,20 +164,7 @@ export async function creditMusicianDownload(
       createdAt: serverTimestamp(),
     });
   }
-
-  // Log the download (no direct earnings per download for musicians)
-  await addDoc(collection(db, "earning_transactions"), {
-    creatorId: musicianId,
-    creatorName: musicianName,
-    type: "download_credit",
-    amount: 0,
-    contentId,
-    contentTitle,
-    downloadedByUserId,
-    downloadedByName,
-    status: "completed",
-    createdAt: serverTimestamp(),
-  });
+  // No per-download transaction logged for musicians — earnings are milestone-based only
 }
 
 // Record withdrawal
