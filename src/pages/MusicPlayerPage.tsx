@@ -5,7 +5,7 @@ import { useMusicById, useMusicVideos } from "@/hooks/useFirestore";
 import { incrementMusicPlays, logActivity } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { creditMusicianDownload, isAdminActivatedSub } from "@/lib/earnings";
+import { creditMusicianDownload } from "@/lib/earnings";
 import CommentSection from "@/components/CommentSection";
 import MusicVideoPlayer from "@/components/MusicVideoPlayer";
 import { toast } from "sonner";
@@ -63,16 +63,14 @@ const MusicPlayerPage = () => {
 
     if (!isCreatorOrAdmin) {
       try {
-        const isAdminSub = await isAdminActivatedSub(user.id);
-        if (!isAdminSub) {
-          await updateDoc(doc(db, "music", id!), { downloads: increment(1) });
-          if (video.musicianId && video.musicianId !== "admin") {
-            creditMusicianDownload(
-              video.musicianId, video.musicianName || video.artist,
-              id!, video.title, user.id,
-              `${user.firstName} ${user.lastName}`.trim() || user.email
-            ).catch(() => {});
-          }
+        // Count download and credit musician earnings for ALL subscribers (paid + admin-activated)
+        await updateDoc(doc(db, "music", id!), { downloads: increment(1) });
+        if (video.musicianId && video.musicianId !== "admin") {
+          creditMusicianDownload(
+            video.musicianId, video.musicianName || video.artist,
+            id!, video.title, user.id,
+            `${user.firstName} ${user.lastName}`.trim() || user.email
+          ).catch(() => {});
         }
       } catch {}
     }

@@ -70,33 +70,33 @@ const MoviePlayerPage = () => {
     const url = movie.movieUrl || videoUrl;
     if (!url) { toast.error("No download link available"); return; }
 
-    // Only count downloads for subscribed regular users (not creators/admin, not admin-activated subs)
+    // Only count downloads for subscribed regular users (not creators/admin)
     if (!isCreatorOrAdmin) {
       try {
         const isAdminSub = await isAdminActivatedSub(user.id);
+
         if (!isAdminSub) {
-          // Record download usage against their plan limit
+          // Record download usage against their plan limit (paid subscribers only)
           const allowed = await recordDownloadUsage();
           if (!allowed) {
             toast.error("Download limit reached. Upgrade your plan!");
             openSubModal("content");
             return;
           }
+        }
 
-          // Count the download
-          incrementMovieDownloads(id!).catch(() => {});
-          
-          // Credit the VJ who owns this movie (250 UGX)
-          if (movie.vjId && movie.vjId !== "admin") {
-            creditVJDownload(
-              movie.vjId,
-              movie.vjName,
-              id!,
-              movie.title,
-              user.id,
-              `${user.firstName} ${user.lastName}`.trim() || user.email
-            ).catch(() => {});
-          }
+        // Count the download and credit VJ earnings for ALL subscribers (paid + admin-activated)
+        incrementMovieDownloads(id!).catch(() => {});
+
+        if (movie.vjId && movie.vjId !== "admin") {
+          creditVJDownload(
+            movie.vjId,
+            movie.vjName,
+            id!,
+            movie.title,
+            user.id,
+            `${user.firstName} ${user.lastName}`.trim() || user.email
+          ).catch(() => {});
         }
       } catch {
         // Don't block download if earning credit fails
